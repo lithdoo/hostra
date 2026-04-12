@@ -1,0 +1,35 @@
+{
+  "name": "tomlith",
+  "version": "1.0.0",
+  "main": "lib/toml.js",
+  "types": "lib/toml.d.ts",
+  "bin": {
+    "tomlith": "lib/cli.js"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "npm run build && node -e \"require('./lib/toml.js'); console.log('tomlith ok')\""
+  },
+  "keywords": [
+    "toml",
+    "tomlith",
+    "parser",
+    "config"
+  ],
+  "author": "lithdo <lithdo@outlook.com>",
+  "license": "ISC",
+  "description": "tomlith: TOML parser and creator utility",
+  "dependencies": {
+    "toml": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.0.0"
+  }
+}

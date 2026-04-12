@@ -1,0 +1,7 @@
+# 应用配置示例
+creator = "./app-creator.ts"
+
+[config]
+name = "My App"
+version = "1.0.0"
+port = 3000

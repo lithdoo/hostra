@@ -1,0 +1,25 @@
+# 多个应用配置示例
+
+[[items]]
+creator = "../creator/app-creator.ts"
+
+[items.config]
+name = "App 1"
+version = "1.0.0"
+port = 3000
+
+[[items]]
+creator = "../creator/app-creator.ts"
+
+[items.config]
+name = "App 2"
+version = "2.0.0"
+port = 3001
+
+[[items]]
+creator = "../creator/app-creator.ts"
+
+[items.config]
+name = "App 3"
+version = "3.0.0"
+port = 3002

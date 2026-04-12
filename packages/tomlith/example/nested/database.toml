@@ -1,0 +1,9 @@
+# database.toml
+creator = "./database-creator.ts"
+
+[config]
+host = "localhost"
+port = 5432
+name = "mydb"
+user = "admin"
+password = "password"

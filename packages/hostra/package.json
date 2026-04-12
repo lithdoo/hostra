@@ -1,0 +1,20 @@
+{
+  "name": "hostra",
+  "version": "1.0.0",
+  "main": "index.js",
+  "bin": "./scripts/hostra.js",
+  "scripts": {
+    "test": "node -e \"console.log('hostra test: no automated tests yet')\"",
+    "postinstall": "node scripts/download-electron.js",
+    "start": "node scripts/hostra.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "Hostra: Electron local shell with WebSocket JSON-RPC",
+  "dependencies": {
+    "@electron/get": "^2.0.2",
+    "adm-zip": "^0.5.16",
+    "jayson": "^4.3.0",
+    "ws": "^8.19.0"
+  }
+}

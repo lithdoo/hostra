@@ -1,0 +1,23 @@
+{
+  "name": "tomlith-examples",
+  "version": "1.0.0",
+  "description": "Examples for tomlith",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "basic": "cd basic && ts-node basic-read.ts",
+    "creator": "cd creator && ts-node create-from-toml.ts",
+    "list": "cd list && ts-node create-from-toml-list.ts",
+    "nested": "cd nested && ts-node nested-config.ts"
+  },
+  "keywords": ["toml", "tomlith", "example"],
+  "author": "lithdo <lithdo@outlook.com>",
+  "license": "ISC",
+  "dependencies": {
+    "tomlith": "file:../"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}

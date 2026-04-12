@@ -1,0 +1,9 @@
+# app.toml
+creator = "./app-creator.ts"
+
+[config]
+name = "My App"
+version = "1.0.0"
+
+# 嵌套数据库配置
+database = "./database.toml"
