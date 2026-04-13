@@ -17,13 +17,13 @@ let rpcServer;
 let subprocess;
 let isShuttingDown = false;
 
-process.env.ELECHER_RPC_PORT = process.env.ELECHER_RPC_PORT || '9333';
-const appName = process.env.ELECHER_APP_NAME;
-const rpcPort = parseInt(process.env.ELECHER_RPC_PORT || '9333', 10);
-const subCmd = process.env.ELECHER_SUBCMD;
-const configDir = process.env.ELECHER_CONFIG_DIR || process.cwd();
-const rpcToken = process.env.ELECHER_RPC_TOKEN || '';
-const userDataDir = process.env.ELECHER_USER_DATA_DIR || '';
+process.env.HOSTRA_RPC_PORT = process.env.HOSTRA_RPC_PORT || '9333';
+const appName = process.env.HOSTRA_APP_NAME;
+const rpcPort = parseInt(process.env.HOSTRA_RPC_PORT || '9333', 10);
+const subCmd = process.env.HOSTRA_SUBCMD;
+const configDir = process.env.HOSTRA_CONFIG_DIR || process.cwd();
+const rpcToken = process.env.HOSTRA_RPC_TOKEN || '';
+const userDataDir = process.env.HOSTRA_USER_DATA_DIR || '';
 
 if (userDataDir) {
   try {
@@ -60,7 +60,7 @@ function startSubprocess(cmd) {
 
   const env = {
     ...process.env,
-    ELECHER_CONFIG_DIR: configDir,
+    HOSTRA_CONFIG_DIR: configDir,
     PYTHONIOENCODING: 'utf-8'
   };
 

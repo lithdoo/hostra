@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 
-const port = Number(process.env.ELECHER_RPC_PORT || 9333);
-const token = process.env.ELECHER_RPC_TOKEN || '';
+const port = Number(process.env.HOSTRA_RPC_PORT || 9333);
+const token = process.env.HOSTRA_RPC_TOKEN || '';
 const wsUrl = token
   ? `ws://localhost:${port}?token=${encodeURIComponent(token)}`
   : `ws://localhost:${port}`;

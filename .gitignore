@@ -92,6 +92,7 @@ packages/promptpile/outputs/
 
 # example runtime data
 example/hostra-open-web/user-data/
+example/hostra-web-editor/user-data/
 
 # npm auth — may contain tokens; do not commit any .npmrc in the repo
 .npmrc

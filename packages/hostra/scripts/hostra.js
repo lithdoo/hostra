@@ -54,15 +54,15 @@ function loadDotEnvFile(filePath) {
 function loadConfig() {
   loadDotEnvFile(path.join(process.cwd(), '.env'));
 
-  const envPort = Number.parseInt(process.env.ELECHER_RPC_PORT || '', 10);
-  const envConfigDir = process.env.ELECHER_CONFIG_DIR || process.cwd();
+  const envPort = Number.parseInt(process.env.HOSTRA_RPC_PORT || '', 10);
+  const envConfigDir = process.env.HOSTRA_CONFIG_DIR || process.cwd();
   return {
-    appName: process.env.ELECHER_APP_NAME || null,
+    appName: process.env.HOSTRA_APP_NAME || null,
     port: Number.isFinite(envPort) ? envPort : 9333,
-    cmd: process.env.ELECHER_SUBCMD || null,
+    cmd: process.env.HOSTRA_SUBCMD || null,
     configDir: envConfigDir,
-    rpcToken: process.env.ELECHER_RPC_TOKEN || null,
-    userDataDir: process.env.ELECHER_USER_DATA_DIR || null
+    rpcToken: process.env.HOSTRA_RPC_TOKEN || null,
+    userDataDir: process.env.HOSTRA_USER_DATA_DIR || null
   };
 }
 
@@ -73,27 +73,27 @@ console.log('[hostra] Config:', config);
 const env = { ...process.env };
 
 if (config.appName) {
-  env.ELECHER_APP_NAME = config.appName;
+  env.HOSTRA_APP_NAME = config.appName;
 }
 
-env.ELECHER_RPC_PORT = config.port.toString();
+env.HOSTRA_RPC_PORT = config.port.toString();
 
 if (config.cmd) {
-  env.ELECHER_SUBCMD = config.cmd;
+  env.HOSTRA_SUBCMD = config.cmd;
 }
 
-env.ELECHER_CONFIG_DIR = config.configDir;
+env.HOSTRA_CONFIG_DIR = config.configDir;
 if (config.rpcToken) {
-  env.ELECHER_RPC_TOKEN = config.rpcToken;
+  env.HOSTRA_RPC_TOKEN = config.rpcToken;
 }
 if (config.userDataDir) {
-  env.ELECHER_USER_DATA_DIR = path.resolve(config.userDataDir);
+  env.HOSTRA_USER_DATA_DIR = path.resolve(config.userDataDir);
 }
 
 // Preserve caller's relative config dir semantics even though Electron process
 // runs with cwd set to package root.
 const resolvedConfigDir = path.resolve(config.configDir);
-env.ELECHER_CONFIG_DIR = resolvedConfigDir;
+env.HOSTRA_CONFIG_DIR = resolvedConfigDir;
 
 console.log('[hostra] Electron path:', electronPath);
 

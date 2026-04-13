@@ -61,7 +61,7 @@ async function downloadElectron() {
     const version = await getLatestVersion();
     console.log(`Latest Electron version: ${version}`);
 
-    const mirrorBase = process.env.ELECHER_MIRROR || 'https://npmmirror.com/mirrors/electron/';
+    const mirrorBase = process.env.HOSTRA_MIRROR || 'https://npmmirror.com/mirrors/electron/';
     console.log(`Using mirror: ${mirrorBase}`);
 
     const platformMap = { win32: 'win32', darwin: 'darwin', linux: 'linux' };

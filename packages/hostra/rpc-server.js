@@ -3,7 +3,7 @@ const path = require('path');
 const { BrowserWindow } = require('electron');
 
 const windows = new Map();
-const configDir = process.env.ELECHER_CONFIG_DIR || process.cwd();
+const configDir = process.env.HOSTRA_CONFIG_DIR || process.cwd();
 
 function createRandomWindowId() {
   return `window_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;

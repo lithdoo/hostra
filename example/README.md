@@ -20,3 +20,4 @@
 ## 已有示例
 
 - `hostra-open-web/`：通过 `hostra` 的 JSON-RPC `openWindow` 打开本地网页
+- `hostra-web-editor/`：通过 `hostra` 打开 `web-editor-component` 编辑器窗口，并联动 `lsp-ws-server`

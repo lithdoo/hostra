@@ -1,4 +1,4 @@
-const token = process.env.ELECHER_RPC_TOKEN || '';
+const token = process.env.HOSTRA_RPC_TOKEN || '';
 const wsUrl = token
   ? `ws://localhost:9333?token=${encodeURIComponent(token)}`
   : 'ws://localhost:9333';
