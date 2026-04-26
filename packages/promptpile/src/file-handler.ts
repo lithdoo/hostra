@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { readFileSync as readUtf8FileFromDisk } from 'a-tools';
 import { normalizeToolCalls } from './ai-client';
 import type { ChatMessage, FileInfo, ToolCall, ToolResultLine } from './types';
 import { formatMissingToolResultContent } from './types';
@@ -109,7 +110,7 @@ export const scanDirectory = (directory: string): FileInfo[] => {
 };
 
 const readMessageFileContent = (file: FileInfo): string => {
-  let content = fs.readFileSync(file.path, 'utf8');
+  let content = readUtf8FileFromDisk(file.path);
   if (file.extension === 'md') {
     content = stripYamlFrontMatter(content);
   }
@@ -210,7 +211,7 @@ const buildMessagesForIdx = (group: FileInfo[]): ChatMessage[] => {
 
   let callToolCalls: ToolCall[] | undefined;
   if (callFile) {
-    const raw = fs.readFileSync(callFile.path, 'utf8');
+    const raw = readUtf8FileFromDisk(callFile.path);
     callToolCalls = parseAssistantCallFile(raw);
     if (callToolCalls.length > 0) {
       messages.push({
@@ -224,7 +225,7 @@ const buildMessagesForIdx = (group: FileInfo[]): ChatMessage[] => {
   const idsFromCall = callToolCalls && callToolCalls.length > 0 ? callToolCalls : undefined;
 
   if (resultFile) {
-    const raw = fs.readFileSync(resultFile.path, 'utf8');
+    const raw = readUtf8FileFromDisk(resultFile.path);
     const rows = parseAssistantResultFile(raw);
     const byId = new Map(rows.map(r => [r.tool_call_id, r]));
 
