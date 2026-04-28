@@ -12,6 +12,7 @@ import {
 } from './file-handler';
 import { callAI, callAIStream } from './ai-client';
 import { loadTools } from './tools-loader';
+import { mergeSearchToolsPack } from './tools-merge';
 import { buildPromptpileHookEnv, resolveAfterHookScript, runAfterHook } from './after-hook';
 import { effectiveToolChoiceForRequest, parseToolChoiceInput } from './tool-choice';
 import {
@@ -130,6 +131,8 @@ async function main(): Promise<void> {
       console.error('Error loading tools:', e instanceof Error ? e.message : e);
       process.exit(1);
     }
+
+    tools = mergeSearchToolsPack(tools);
 
     let toolChoiceForApi: ChatApiToolChoice | undefined;
     try {

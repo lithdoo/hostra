@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { readFileSync as readUtf8FileFromDisk } from 'a-tools';
+import { readFileSync as readUtf8FileFromDisk } from '@agent-tool-lite/file';
 import { normalizeToolCalls } from './ai-client';
 import type { ChatMessage, FileInfo, ToolCall, ToolResultLine } from './types';
 import { formatMissingToolResultContent } from './types';
