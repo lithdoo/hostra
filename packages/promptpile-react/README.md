@@ -59,7 +59,7 @@
 
 | 行为 | 说明 |
 |------|------|
-| **argv** | 从 `forwardedArgs` **拷贝**后 **移除** `--tools-file`、`-o` / `--output`、`--after-hook-path` 及其参数；再追加 **临时** `--tools-file`（单行 `.tools.jsonl`，内含工具 **`react_observe_decision`**）、**`-o`** 指向临时 `.md`（主输出保留在磁盘供排查）。 |
+| **argv** | 从 `forwardedArgs` **拷贝**后 **移除** `--tools-file`、`-o` / `--output`、`--after-hook-path` 及其参数；再追加 **临时** `--tools-file`（单行 `.tools.jsonl`，内含工具 **`react_observe_decision`**；该行须为 **`promptpile` 扁平工具条目** `{ name, description?, parameters? }`，与默认 `.tools.toml` 内每一项同理）、**`-o`** 指向临时 `.md`（主输出保留在磁盘供排查）。 |
 | **after-hook** | 本轮 argv **不带** `--after-hook-path`，避免钩子处理本轮 `.calls.jsonl`。 |
 | **observe 注入** | 若 `prompts.observe` 非空，则临时 `.md` + `--system-inject-file`（与 thought 同理）。 |
 | **`-c`** | `continueMode` 为真时在本轮 argv 末尾追加 `-c`。 |
