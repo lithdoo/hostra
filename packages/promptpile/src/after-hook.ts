@@ -110,7 +110,7 @@ export const runAfterHook = (options: {
   hookEnv: NodeJS.ProcessEnv;
   quiet: boolean;
 }): Promise<void> => {
-  const { scriptPath, scanAbs, hookEnv, quiet } = options;
+  const { scriptPath, scanAbs, hookEnv } = options;
   const ext = path.extname(scriptPath).toLowerCase();
 
   let command: string;
@@ -166,11 +166,6 @@ export const runAfterHook = (options: {
         if (stderr.trim()) {
           console.error(stderr.trimEnd());
         }
-      } else if (!quiet && stderr.trim()) {
-        console.error(stderr.trimEnd());
-      }
-      if (!quiet && stdout.trim()) {
-        console.error('after-hook stdout:', stdout.trimEnd());
       }
       resolvePromise();
     });

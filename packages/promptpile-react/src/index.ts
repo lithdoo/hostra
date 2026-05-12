@@ -61,10 +61,7 @@ async function runInputMode(
     }
 
     try {
-      const savedPath = appendUserFromTerminal(dir, userContent);
-      if (!options.quiet) {
-        console.log(`Saved user message: ${savedPath}`);
-      }
+      appendUserFromTerminal(dir, userContent);
     } catch (e) {
       console.error('Error:', e instanceof Error ? e.message : e);
       process.exitCode = 1;

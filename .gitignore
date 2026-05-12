@@ -99,3 +99,4 @@ example/hostra-file-view/user-data/
 .npmrc
 /example/hostra-command-terminal/user-data
 user-data
+/example/promptpile-mcp-launcher/.playwright-mcp
