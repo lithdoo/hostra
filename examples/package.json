@@ -1,0 +1,21 @@
+{
+  "name": "hostra-examples",
+  "version": "1.0.0",
+  "description": "Hostra reference examples",
+  "private": true,
+  "scripts": {
+    "test": "node -e \"console.log('hostra-examples: no automated tests yet')\"",
+    "list": "node -e \"console.log('Run one of the examples/hostra-* scripts')\""
+  },
+  "keywords": [
+    "hostra",
+    "examples"
+  ],
+  "dependencies": {
+    "hostra": "file:../packages/hostra",
+    "ws": "^8.19.0"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

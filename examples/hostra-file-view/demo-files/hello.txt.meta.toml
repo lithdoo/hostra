@@ -1,0 +1,7 @@
+[info]
+title = "Demo hello"
+describe = "Sample metadata for file-view-ws-server"
+tags = ["demo", "hostra"]
+
+[extends]
+rating = 5

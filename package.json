@@ -1,0 +1,14 @@
+{
+  "name": "hostra-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test -w hostra"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

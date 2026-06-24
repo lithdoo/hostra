@@ -1,0 +1,9 @@
+node_modules/
+packages/*/node_modules/
+packages/*/electron_bin/
+*.tgz
+.env
+.env.*
+!.env.example
+examples/.env
+examples/*/.env

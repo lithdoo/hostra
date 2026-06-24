@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>hostra file-view example</title>
+    <link rel="stylesheet" href="/file-view/file-view-component-icons.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #fff;
+        color: #333;
+        font-family: system-ui, sans-serif;
+      }
+      #root {
+        box-sizing: border-box;
+        min-height: 100%;
+        padding: 12px 16px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      file-view {
+        display: none;
+      }
+      #fv-icons-root {
+        flex: 1;
+        min-height: 240px;
+      }
+      .hint {
+        font-size: 13px;
+        opacity: 0.85;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <p class="hint">
+        Browsing <code>examples/hostra-file-view/demo-files</code> via
+        <code>file-view-ws-server</code>. Icons UI listens on
+        <code>&lt;file-view&gt;</code> state events.
+      </p>
+      <file-view
+        id="fv"
+        url="ws://127.0.0.1:8081/rpc"
+        target="__FILE_VIEW_DEMO_DIR__"
+        auto-reconnect-timeout="3000"
+      ></file-view>
+      <div id="fv-icons-root"></div>
+    </div>
+    <script type="module">
+      import '/file-view/file-view-component.js';
+      import { mountFileViewIcons } from '/file-view/file-view-component-icons.js';
+
+      const fv = document.getElementById('fv');
+      const root = document.getElementById('fv-icons-root');
+      mountFileViewIcons({ root, fileView: fv, showParentNav: true });
+    </script>
+  </body>
+</html>
