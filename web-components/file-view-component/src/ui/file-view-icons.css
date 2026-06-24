@@ -1,0 +1,99 @@
+.fv-icons {
+  box-sizing: border-box;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  color: #1a1a1a;
+}
+
+.fv-icons__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #f7f7f7;
+}
+
+.fv-icons__bar-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.fv-icons__bar-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fv-icons__bar-sub {
+  font-size: 12px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fv-icons__parent {
+  flex-shrink: 0;
+}
+
+.fv-icons__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 10px;
+}
+
+.fv-icons__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  cursor: default;
+}
+
+.fv-icons__cell--dir {
+  cursor: pointer;
+}
+
+.fv-icons__cell--dir:hover {
+  border-color: #888;
+  background: #fafafa;
+}
+
+.fv-icons__cell--selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.fv-icons__cell--selected.fv-icons__cell--dir:hover {
+  border-color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.fv-icons__cell:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.fv-icons__glyph {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.fv-icons__name {
+  font-size: 12px;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

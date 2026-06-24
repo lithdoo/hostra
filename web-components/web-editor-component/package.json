@@ -1,0 +1,50 @@
+{
+  "name": "@web-editor/component",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/web-editor-component.js",
+  "module": "./dist/web-editor-component.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/web-editor-component.js"
+    },
+    "./web-editor-component.css": "./dist/web-editor-component.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build && tsc --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codingame/monaco-vscode-api": "^25.1.2",
+    "@codingame/monaco-vscode-configuration-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-editor-api": "^25.1.2",
+    "@codingame/monaco-vscode-editor-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-extension-api": "^25.1.2",
+    "@codingame/monaco-vscode-extensions-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-files-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-standalone-languages": "^25.1.2",
+    "@codingame/monaco-vscode-views-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-languages-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-localization-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-log-service-override": "^25.1.2",
+    "@codingame/monaco-vscode-model-service-override": "^25.1.2",
+    "monaco-languageclient": "^10.7.0",
+    "vscode": "npm:@codingame/monaco-vscode-extension-api@^25.1.2",
+    "vscode-ws-jsonrpc": "^3.5.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.2",
+    "vite": "^6.0.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@^25.1.2"
+    }
+  }
+}

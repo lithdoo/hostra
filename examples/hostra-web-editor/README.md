@@ -7,7 +7,7 @@
 
 ## 运行前准备
 
-确保这两个项目已构建：
+在 hostra 仓库根目录下，确保这两个项目已构建：
 
 ```bash
 cd web-components/lsp-ws-server && npm install && npm run build

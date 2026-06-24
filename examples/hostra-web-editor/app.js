@@ -8,10 +8,10 @@ const rpcPort = Number(process.env.HOSTRA_RPC_PORT || 9333);
 const rpcToken = process.env.HOSTRA_RPC_TOKEN || '';
 const pagePort = 4173;
 const lspPort = 3001;
-const lithdooLabDir = process.env.LITHDOO_LAB_DIR || path.resolve(__dirname, '../../..');
+const hostraRepoDir = process.env.HOSTRA_REPO_DIR || path.resolve(__dirname, '../..');
 
-const lspCli = path.resolve(lithdooLabDir, 'web-components/lsp-ws-server/dist/cli.js');
-const webEditorDist = path.resolve(lithdooLabDir, 'web-components/web-editor-component/dist');
+const lspCli = path.resolve(hostraRepoDir, 'web-components/lsp-ws-server/dist/cli.js');
+const webEditorDist = path.resolve(hostraRepoDir, 'web-components/web-editor-component/dist');
 const indexHtml = path.join(__dirname, 'index.html');
 
 if (!fs.existsSync(lspCli)) {

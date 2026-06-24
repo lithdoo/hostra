@@ -1,6 +1,8 @@
 node_modules/
 packages/*/node_modules/
 packages/*/electron_bin/
+web-components/*/dist/
+web-components/*/node_modules/
 *.tgz
 .env
 .env.*
