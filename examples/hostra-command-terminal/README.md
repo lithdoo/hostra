@@ -1,10 +1,10 @@
 # hostra-command-terminal
 
-通过 `hostra` 打开一个窗口，展示 [`web-command-component`](../../../web-components/web-command-component) 的 `<command-terminal>`，并由本机子进程运行 [`command-ws-server`](../../../web-components/command-ws-server) 提供 PTY WebSocket。
+通过 `hostra` 打开一个窗口，展示 [`web-command-component`](../../web-components/web-command-component) 的 `<command-terminal>`，并由本机子进程运行 [`command-ws-server`](../../web-components/command-ws-server) 提供 PTY WebSocket。
 
 ## 运行前准备
 
-确保两个包已构建：
+在 hostra 仓库根目录下，确保两个包已构建：
 
 ```bash
 cd web-components/command-ws-server && npm install && npm run build

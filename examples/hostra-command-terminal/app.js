@@ -8,14 +8,14 @@ const rpcPort = Number(process.env.HOSTRA_RPC_PORT || 9333);
 const rpcToken = process.env.HOSTRA_RPC_TOKEN || '';
 const pagePort = 4174;
 const commandWsPort = 8082;
-const lithdooLabDir = process.env.LITHDOO_LAB_DIR || path.resolve(__dirname, '../../..');
+const hostraRepoDir = process.env.HOSTRA_REPO_DIR || path.resolve(__dirname, '../..');
 
 const commandCli = path.resolve(
-  lithdooLabDir,
+  hostraRepoDir,
   'web-components/command-ws-server/dist/cli.js',
 );
 const webCommandDist = path.resolve(
-  lithdooLabDir,
+  hostraRepoDir,
   'web-components/web-command-component/dist',
 );
 const indexHtml = path.join(__dirname, 'index.html');

@@ -1,0 +1,30 @@
+{
+  "name": "@web-editor/lsp-ws-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "lsp-ws-server": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@taplo/cli": "^0.7.0",
+    "typescript": "~5.7.2",
+    "typescript-language-server": "^4.3.3",
+    "vscode-langservers-extracted": "^4.10.0",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-ws-jsonrpc": "^3.5.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2"
+  }
+}

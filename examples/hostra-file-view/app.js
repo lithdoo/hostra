@@ -9,10 +9,10 @@ const rpcPort = Number(process.env.HOSTRA_RPC_PORT || 9333);
 const rpcToken = process.env.HOSTRA_RPC_TOKEN || '';
 const pagePort = 4174;
 const fvWsPort = 8081;
-const lithdooLabDir = process.env.LITHDOO_LAB_DIR || path.resolve(__dirname, '../../..');
+const hostraRepoDir = process.env.HOSTRA_REPO_DIR || path.resolve(__dirname, '../..');
 
-const fvCli = path.resolve(lithdooLabDir, 'web-components/file-view-ws-server/dist/cli.js');
-const fileViewDist = path.resolve(lithdooLabDir, 'web-components/file-view-component/dist');
+const fvCli = path.resolve(hostraRepoDir, 'web-components/file-view-ws-server/dist/cli.js');
+const fileViewDist = path.resolve(hostraRepoDir, 'web-components/file-view-component/dist');
 const indexHtml = path.join(__dirname, 'index.html');
 const demoDir = path.join(__dirname, 'demo-files');
 const demoDirFileUrl = pathToFileURL(demoDir).href;
