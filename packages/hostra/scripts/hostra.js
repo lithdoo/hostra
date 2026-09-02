@@ -105,13 +105,18 @@ console.log('[hostra] Electron path:', electronPath);
 const child = spawn(electronPath, [mainPath], {
   stdio: 'inherit',
   cwd: path.join(__dirname, '..'),
-  env
+  env,
+  detached: process.platform !== 'win32'
 });
 
 function forwardSignal(signal) {
   if (child.exitCode === null && child.signalCode === null) {
     console.log(`[hostra] Forwarding ${signal} to Electron`);
-    child.kill(signal);
+    if (process.platform === 'win32') {
+      child.kill(signal);
+    } else {
+      process.kill(-child.pid, signal);
+    }
   }
 }
 
