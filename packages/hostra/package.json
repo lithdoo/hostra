@@ -1,8 +1,10 @@
 {
   "name": "hostra",
-  "version": "1.0.0",
+  "version": "1.0.1-beta.0",
   "main": "index.js",
-  "bin": "./scripts/hostra.js",
+  "bin": {
+    "hostra": "scripts/hostra.js"
+  },
   "scripts": {
     "test": "node --test --test-concurrency=1 test/*.test.js",
     "postinstall": "node scripts/download-electron.js",
