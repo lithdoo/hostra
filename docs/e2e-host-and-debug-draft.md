@@ -1,69 +1,122 @@
-# Hostra E2E Host 与调试能力草案
+# Hostra Endpoint Discovery、Lifecycle Observability 与 CDP 草案
 
 > Status: Draft  
-> Scope: 将 Hostra 收敛为可确定启动、可观测、可调试的真实 Electron E2E Host。  
-> Out of scope: 并行 Hostra 实例、自动端口分配、业务协议、DOM 自动化 RPC、Playwright/Puppeteer wrapper。
+> Scope: 将 Hostra 收敛为一个可确定启动、可发现 endpoint、可观测 Host 生命周期、可通过标准 CDP 调试 Renderer 的本地 Electron Host。  
+> Out of scope: 业务协议、DOM 自动化 RPC、Playwright/Puppeteer wrapper、CDP proxy、Renderer/Page 生命周期翻译层。
 
-## 1. 背景
+## 1. Hostra 的整体定位
 
-Hostra 当前已经具备以下真实物理能力：
+Hostra 本质上是一个本地 Desktop Host Runtime，而不是业务应用框架，也不是浏览器自动化框架。
 
-- 启动本机 Electron；
-- 提供 localhost WebSocket JSON-RPC；
-- 通过 `HOSTRA_SUBCMD` 托管真实业务子进程；
-- 业务子进程继承 Hostra 环境变量；
-- 子进程退出时收敛 Hostra 生命周期；
-- Hostra 退出时终止业务子进程；
-- 创建和关闭真实 `BrowserWindow`；
-- 可配置独立 `userData` 目录。
+当前启动关系可以抽象为：
 
-这些能力已经足以让 Hostra 承担真实桌面 E2E 的 physical host，但当前仍偏向手工运行工具：缺少确定性的 ready signal、Host/Window/子进程生命周期观测、标准 Renderer 调试入口、自动化 smoke test，以及稳定的 Electron 版本基线。
+```text
+npx hostra
+   |
+   v
+Hostra CLI / Bootstrap
+scripts/hostra.js
+   |
+   | spawn
+   v
+Electron Main Process
+   |
+   +-- Host Runtime
+   |    +-- BrowserWindow ownership
+   |    +-- HOSTRA_SUBCMD ownership
+   |    +-- shutdown ownership
+   |    +-- Host state / lifecycle facts
+   |
+   +-- Hostra RPC / WebSocket
+   |
+   +-- CDP endpoint
+        |
+        v
+   Renderer / WebContents
+```
 
-本草案的目标是在不引入业务语义的前提下，把 Hostra 收敛成一个 deterministic、observable、debuggable 的 Desktop E2E Host。
+CLI 层负责配置读取、Electron binary 定位和进程启动；Electron Main 才是 Hostra 运行期事实的 authority。
+
+因此 Hostra 应明确分成三个 plane：
+
+```text
+Bootstrap Plane
+  = 启动 Electron、发现最终 endpoint、向调用方报告 ready
+
+Host Control Plane
+  = Host / Window / child-process physical lifecycle
+  = Hostra RPC over WebSocket
+
+Renderer Debug Plane
+  = Renderer / WebContents / Page / DOM / Runtime / Network / Input
+  = Chromium DevTools Protocol (CDP)
+```
+
+三个 plane 应保持职责单一，不互相复制语义。
 
 ---
 
 ## 2. 设计原则
 
-### 2.1 Hostra 只拥有 Host-level 物理事实
+### 2.1 Hostra 只声明自己拥有的物理事实
 
 Hostra 可以负责：
 
 - Electron process；
 - `BrowserWindow` 的创建、关闭和物理存在性；
-- Host RPC；
-- Chromium DevTools Protocol（CDP）入口；
 - `HOSTRA_SUBCMD` 子进程的启动与物理生命周期；
+- Host shutdown；
+- Host RPC；
+- RPC/CDP endpoint discovery；
 - Host-level diagnostics；
-- Host-level readiness / shutdown events。
+- Host-level lifecycle events。
 
 Hostra 不负责：
 
-- 业务应用 ready 语义；
-- 页面业务状态；
-- DOM selector、click、type、evaluate、screenshot 等自动化 API；
-- 网络/Console/Runtime/Page 等 Chromium 调试语义；
-- 上层业务协议或运行时协议。
+- 页面是否业务 ready；
+- DOM 状态；
+- navigation / load / console / network / JS exception 等 Renderer/Page 事实；
+- click/type/evaluate/screenshot 等自动化 API；
+- 上层业务协议。
 
-页面与 Renderer 层的观测和自动化应直接使用 CDP 或建立在 CDP 之上的标准工具。
+Renderer/WebContents 内部发生了什么，以 CDP 为标准入口。
 
-### 2.2 控制平面与调试平面分离
+### 2.2 生命周期事实属于 Host Runtime，不属于 WebSocket
 
-Hostra 应明确区分两个入口：
+WebSocket 只是 transport adapter。
+
+推荐内部结构：
 
 ```text
-Hostra RPC
-  = Host / Window / child-process physical lifecycle
-
-CDP
-  = Renderer / WebContents introspection and automation
+HostRuntime
+   |
+   +-- WindowManager
+   +-- SubprocessSupervisor
+   +-- HostState
+   +-- EventBus / sequence
+           |
+           v
+      HostRpcServer
+           |
+           v
+       WebSocket clients
 ```
 
-Hostra RPC 不重新包装 CDP 已经提供的 Page/Runtime/DOM/Network/Input 等能力。
+例如：
 
-### 2.3 CDP 成为 Renderer 事实的唯一标准入口
+```text
+BrowserWindow closes
+   -> WindowManager updates state
+   -> HostRuntime emits window.closed
+   -> EventBus assigns seq
+   -> WebSocket adapter broadcasts notification
+```
 
-引入 CDP 后，不再在 Hostra RPC 中重复实现以下能力：
+不要让 `rpc-server.js` 本身成为 Host 生命周期事实源。
+
+### 2.3 Renderer 事实只走 CDP
+
+引入 CDP 后，Hostra RPC 不再规划：
 
 ```text
 window.domReady
@@ -80,246 +133,251 @@ network inspection
 console capture
 ```
 
-这样避免形成两套 Renderer 事实源：
+这样避免出现两套 Renderer 事实源：
 
 ```text
 Electron event -> Hostra translated event
 Chromium event -> CDP event
 ```
 
-Renderer/WebContents 内部发生了什么，以 CDP 为准；Hostra 只声明自己实际拥有的物理资源是否存在。
-
-### 2.4 调试能力默认关闭
-
-CDP 是诊断/测试能力，不应默认暴露。
-
-只有显式配置 `HOSTRA_CDP_PORT` 时才启用，并且应限制为 loopback 使用。正常用户运行不应因为 Hostra 存在而自动开启 remote debugging。
+Hostra 只负责 Window 是否存在；Window 内部发生什么由 CDP 观察。
 
 ---
 
-## 3. 建议配置
+## 3. Endpoint 配置与随机端口
 
-保留现有配置，并增加 CDP 与 Electron version 配置：
+建议支持：
 
 ```env
-HOSTRA_APP_NAME=my-app
 HOSTRA_RPC_PORT=9333
-HOSTRA_RPC_TOKEN=replace-with-token
-HOSTRA_SUBCMD=node ./app.js
-HOSTRA_CONFIG_DIR=.
-HOSTRA_USER_DATA_DIR=./user-data
-
-# Optional. Disabled when unset.
 HOSTRA_CDP_PORT=9222
-
-# Optional override. Default comes from the Hostra package pinned version.
-HOSTRA_ELECTRON_VERSION=...
 ```
 
-### 3.1 `HOSTRA_CDP_PORT`
+同时定义：
 
-语义：
+```env
+HOSTRA_RPC_PORT=0
+HOSTRA_CDP_PORT=0
+```
 
-- 未设置：不启用 Chromium remote debugging；
-- 设置为有效端口：Electron 启动前增加 Chromium remote debugging switch；
-- Hostra 不承诺该端口对非 loopback 地址可达；
-- 测试或诊断工具可以通过 CDP 枚举并连接 Hostra 内的 Renderer/WebContents target。
+语义均为：请求动态端口，由运行时选择可用端口，并通过 Bootstrap Plane 报告最终 endpoint。
 
-建议实现方式：在 Electron `ready` 之前执行：
+### 3.1 RPC 随机端口
 
-```js
-const cdpPort = process.env.HOSTRA_CDP_PORT;
-if (cdpPort) {
-  app.commandLine.appendSwitch('remote-debugging-port', String(cdpPort));
+`HOSTRA_RPC_PORT=0` 时，WebSocket server 应直接让 OS 分配端口。
+
+Hostra 必须等待 server 真正进入 listening 状态后读取实际端口；不能在 `new WebSocketServer(...)` 后立即假设 endpoint 已 ready。
+
+例如最终得到：
+
+```text
+ws://127.0.0.1:43817
+```
+
+### 3.2 CDP 随机端口
+
+`HOSTRA_CDP_PORT=0` 表示请求 Chromium remote debugging 的动态端口。
+
+实现细节不作为公开 contract 固定，但必须满足：
+
+- 使用当前 pinned Electron 版本真实验证；
+- 能可靠得到最终实际端口；
+- 最终 endpoint 必须通过 Bootstrap Plane 返回；
+- 不依赖调用方猜测或扫描端口。
+
+Chromium 支持 `--remote-debugging-port=0` 的动态端口行为，但 Electron 官方文档只明确承诺 `--remote-debugging-port=<port>`，因此 Hostra 应将 `port=0` 作为自身经过 smoke test qualification 的能力，而不是未经验证地假设所有 Electron 版本都一致。
+
+如 pinned Electron 的 `port=0` 行为或 endpoint discovery 不可靠，Hostra 可以采用其它内部实现，但公开语义仍保持：
+
+```text
+HOSTRA_CDP_PORT=0
+=> Hostra chooses a usable CDP port
+=> caller receives final cdpEndpoint
+```
+
+### 3.3 固定端口与随机端口的 contract
+
+```text
+PORT unset
+  -> 使用默认值或关闭该能力（按具体配置定义）
+
+PORT = positive integer
+  -> 请求固定端口
+
+PORT = 0
+  -> 请求动态端口
+```
+
+CDP 未配置时仍默认关闭。
+
+---
+
+## 4. Bootstrap Plane：为什么需要内部管道
+
+运行期 lifecycle event 应走 WebSocket，但 endpoint discovery 不能依赖 WebSocket 本身。
+
+特别是：
+
+```text
+HOSTRA_RPC_PORT=0
+```
+
+此时调用方在 Hostra 启动前不知道 WS 地址，因此 `hostra.ready` 不能只通过 WS 发送。
+
+推荐：
+
+```text
+Hostra CLI
+   |
+   | private bootstrap IPC / pipe
+   v
+Electron Main
+```
+
+Electron Main 在自身初始化完成后向 CLI 返回：
+
+```json
+{
+  "type": "ready",
+  "pid": 12345,
+  "rpcEndpoint": "ws://127.0.0.1:43817",
+  "cdpEndpoint": "http://127.0.0.1:45122"
 }
 ```
 
-CDP 与 Hostra RPC 是独立接口：
+CLI 再向调用方输出稳定、机器可解析的 record：
 
 ```text
-ws://127.0.0.1:<HOSTRA_RPC_PORT>
-http://127.0.0.1:<HOSTRA_CDP_PORT>
+[hostra:event] {"type":"hostra.ready","pid":12345,"rpcEndpoint":"ws://127.0.0.1:43817","cdpEndpoint":"http://127.0.0.1:45122"}
 ```
 
-### 3.2 不新增全局 `HOSTRA_DEBUG` 作为必要前提
+因此规则是：
 
-初版避免额外总开关造成配置组合歧义。`HOSTRA_CDP_PORT` 本身即可作为显式 opt-in。
+```text
+Bootstrap discovery
+  -> private CLI <-> Electron Main IPC / pipe
+  -> structured stdout for external parent
 
-未来如果出现多种 debug capability，再考虑统一 debug policy。
+Runtime lifecycle
+  -> WebSocket JSON-RPC notifications
+```
+
+### 4.1 私有 IPC 不成为公开 Hostra API
+
+不要增加类似：
+
+```text
+HOSTRA_EVENT_PIPE
+HOSTRA_CONTROL_FD
+```
+
+也不要要求 `HOSTRA_SUBCMD` 继承某个特殊 fd。
+
+内部通道只解决 CLI 与 Electron Main 之间的 bootstrap/control 问题。
+
+具体实现可以优先评估 Node child-process IPC channel；如 Electron 跨平台行为需要其它 private pipe，实现方式可以替换，但不影响公开 contract。
 
 ---
 
-## 4. Hostra Ready Contract
+## 5. `hostra.ready` Contract
 
-### 4.1 问题
+`hostra.ready` 是 Bootstrap Plane 的事件，不属于运行期 WS lifecycle stream。
 
-自动化程序不应依赖：
+它至少表示：
 
-```text
-spawn Hostra
-sleep 1000
-try connect
-```
+1. Electron Main 已完成 Hostra 自身初始化；
+2. Hostra RPC 已真实进入 listening 状态；
+3. 最终 `rpcEndpoint` 已确定；
+4. 如果启用 CDP，最终 `cdpEndpoint` 已确定并可用于连接；
+5. Host Runtime 已可以接受后续控制；
+6. 如果配置 `HOSTRA_SUBCMD`，其启动动作可以在此之后按既定顺序进行或已进入明确启动阶段。
 
-这类时间猜测容易造成 flaky。
-
-### 4.2 Ready 的定义
-
-`hostra.ready` 至少表示：
-
-1. Electron `app.whenReady()` 已完成；
-2. Hostra RPC 已进入可接受连接状态；
-3. 如果启用 CDP，其启动配置已经生效；
-4. Hostra 已完成自身初始化；
-5. 如果配置了 `HOSTRA_SUBCMD`，其启动动作已经进入可执行阶段。
-
-必须明确：
+必须区分：
 
 ```text
 hostra.ready
-!=
-subprocess.ready
-!=
-application.ready
+!= subprocess.started
+!= application.ready
+!= page.loaded
 ```
 
-Hostra 只能声明自己拥有的事实。
-
-### 4.3 机器可解析 stdout record
-
-建议 Hostra ready 后输出稳定的结构化 record：
-
-```json
-{
-  "type": "hostra.ready",
-  "pid": 12345,
-  "rpcEndpoint": "ws://127.0.0.1:9333",
-  "cdpEndpoint": "http://127.0.0.1:9222"
-}
-```
-
-未启用 CDP 时：
-
-```json
-{
-  "type": "hostra.ready",
-  "pid": 12345,
-  "rpcEndpoint": "ws://127.0.0.1:9333",
-  "cdpEndpoint": null
-}
-```
-
-普通人类日志可以保留，但自动化程序应依赖结构化 record，而不是解析自然语言日志。
-
-建议固定前缀：
-
-```text
-[hostra:event] {"type":"hostra.ready",...}
-```
+Hostra 只声明自己的 ready。
 
 ---
 
-## 5. Host Info
+## 6. Host Control Plane：生命周期事件统一走 WebSocket
 
-建议增加 RPC：
+Hostra 已经有 localhost WebSocket JSON-RPC，因此公开生命周期事件应直接复用同一个 control plane。
 
-```text
-getHostInfo()
-```
-
-返回 Hostra 当前物理事实：
+推荐使用 JSON-RPC Notification：
 
 ```json
 {
-  "pid": 12345,
-  "platform": "win32",
-  "arch": "x64",
-  "electronVersion": "...",
-  "rpcEndpoint": "ws://127.0.0.1:9333",
-  "cdpEndpoint": "http://127.0.0.1:9222",
-  "configDir": "...",
-  "userDataDir": "...",
-  "subprocess": {
-    "configured": true,
-    "pid": 23456,
-    "state": "running"
-  }
-}
-```
-
-要求：
-
-- 不返回 RPC token；
-- 不返回完整环境变量；
-- 不返回任意业务敏感配置；
-- 只暴露 Hostra 自身需要诊断的物理事实。
-
----
-
-## 6. Window 物理生命周期
-
-### 6.1 Hostra 只跟踪 BrowserWindow 物理事实
-
-Hostra 自己创建和拥有 `BrowserWindow`，因此以下事实属于 Hostra：
-
-```text
-window.created
-window.closed
-```
-
-但下面这些 Renderer/Page 事实不再由 Hostra RPC 建模：
-
-```text
-dom-ready
-did-finish-load
-did-fail-load
-navigation
-network failure
-JavaScript exception
-console output
-DOM state
-```
-
-这些统一交给 CDP。
-
-### 6.2 保留并扩展 `getAllWindows()`
-
-不新增复杂 `getWindowState()`；优先扩展现有 `getAllWindows()`，返回用于 Host-level 定位和 CDP target 关联的最小信息：
-
-```json
-[
-  {
+  "jsonrpc": "2.0",
+  "method": "hostra.event",
+  "params": {
+    "seq": 17,
+    "type": "window.created",
     "windowId": "main",
-    "webContentsId": 3,
-    "title": "Example",
-    "url": "http://127.0.0.1:4174/"
+    "webContentsId": 3
   }
-]
-```
-
-字段语义：
-
-- `windowId`: Hostra 自己的稳定 window identity；
-- `webContentsId`: Electron `webContents.id`，用于诊断与 target correlation；
-- `title`: Hostra 创建窗口时的 Host-level metadata；
-- `url`: 当前可观察 URL，可作为诊断信息，不作为页面 ready 判断依据。
-
-### 6.3 `openWindow()` 返回值
-
-现有只返回 `windowId` 的行为可以保持兼容，也可以在后续 major/minor contract 演进中返回：
-
-```json
-{
-  "windowId": "main",
-  "webContentsId": 3
 }
 ```
 
-如果需要保持完全兼容，则通过 `getAllWindows()` 获取 `webContentsId` 即可。
+不带 `id`，表示 notification。
 
-### 6.4 Window events
+### 6.1 为什么不用公开 pipe 发送生命周期事件
 
-建议只广播：
+公开 pipe 会绑定父子进程 topology，并引入：
+
+- fd inheritance；
+- Windows pipe 差异；
+- Node child-process 假设；
+- 一个 parent/child 通道难以服务多个观察客户端；
+- 与已有 WS RPC 形成第二套公开 transport。
+
+WebSocket 则已经具备：
+
+- 本地跨语言访问；
+- 多客户端；
+- JSON framing；
+- 现有 token 鉴权；
+- command 与 notification 可共用同一连接。
+
+因此：
+
+```text
+公开 runtime control / lifecycle = WS
+内部 bootstrap discovery = private pipe / IPC
+```
+
+---
+
+## 7. Lifecycle Event Contract
+
+第一版稳定 contract 建议只保留真正的资源状态变化。
+
+### 7.1 Host
+
+```text
+host.shuttingDown
+```
+
+不建议冻结：
+
+```text
+host.rpcClosing
+host.exited
+```
+
+原因：
+
+- WS close 本身已经表示 transport 消失；
+- `host.rpcClosing` 存在明显 close race，价值有限；
+- 进程真正退出后无法再通过自身 RPC 发送 `host.exited`；
+- 最终 exit code 应由 Hostra 的父进程句柄观察。
+
+### 7.2 Window
 
 ```text
 window.created
@@ -333,6 +391,7 @@ window.closed
   "jsonrpc": "2.0",
   "method": "hostra.event",
   "params": {
+    "seq": 18,
     "type": "window.created",
     "windowId": "main",
     "webContentsId": 3
@@ -340,83 +399,54 @@ window.closed
 }
 ```
 
-Hostra 不广播 `window.loaded` 等 Renderer/Page 事件。
-
----
-
-## 7. CDP Target 关联
-
-### 7.1 目标
-
-自动化工具通常先通过 Hostra RPC 知道要操作哪个 Hostra window，再通过 CDP 操作对应 Renderer。
-
-因此 Hostra 需要提供足够的关联信息，但不应该维护第二套 CDP target registry。
-
-推荐关系：
-
-```text
-Hostra windowId
-    -> webContentsId / URL / title
-    -> CDP enumerate targets
-    -> automation tool resolves target
-```
-
-### 7.2 不建议 Hostra 主动代理 CDP
-
-初版不增加：
-
-```text
-getCdpTargetId(windowId)
-attachCdp(windowId)
-evaluateInWindow(windowId, script)
-```
-
-原因：
-
-- CDP target lifecycle 属于 Chromium；
-- Hostra 不应成为 CDP proxy；
-- 标准工具已经具备 target discovery 与 attach 能力；
-- 避免 Hostra 绑定某一 CDP client/tool 的行为模型。
-
-如果未来 `webContentsId` 无法稳定用于 target correlation，再单独设计最小映射能力。
-
----
-
-## 8. Subprocess 生命周期可观测性
-
-Hostra 已经负责 `HOSTRA_SUBCMD` 的物理进程生命周期，因此应该暴露这些事实。
-
-建议事件：
-
-```text
-subprocess.starting
-subprocess.started
-subprocess.spawnFailed
-subprocess.exited
-subprocess.terminateRequested
-subprocess.forceKillRequested
-```
-
-启动示例：
+关闭：
 
 ```json
 {
   "jsonrpc": "2.0",
   "method": "hostra.event",
   "params": {
+    "seq": 19,
+    "type": "window.closed",
+    "windowId": "main"
+  }
+}
+```
+
+不发送 Renderer/Page lifecycle event。
+
+### 7.3 Subprocess
+
+稳定 contract 建议：
+
+```text
+subprocess.started
+subprocess.spawnFailed
+subprocess.exited
+```
+
+启动：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "hostra.event",
+  "params": {
+    "seq": 20,
     "type": "subprocess.started",
     "pid": 23456
   }
 }
 ```
 
-退出示例：
+退出：
 
 ```json
 {
   "jsonrpc": "2.0",
   "method": "hostra.event",
   "params": {
+    "seq": 21,
     "type": "subprocess.exited",
     "pid": 23456,
     "code": 0,
@@ -425,302 +455,418 @@ subprocess.forceKillRequested
 }
 ```
 
-Hostra 不解释子进程为什么退出，也不把业务错误映射为 Hostra 自己的错误类别。
-
----
-
-## 9. Host Shutdown 可观测性
-
-建议增加：
+下面这些更适合作为 Supervisor diagnostic，而不是第一版稳定 lifecycle contract：
 
 ```text
-host.shuttingDown
-host.rpcClosing
+subprocess.starting
+subprocess.terminateRequested
+subprocess.forceKillRequested
 ```
 
-`hostra.ready` 之后发生 shutdown 时，控制客户端应能观察到 shutdown 已开始，而不是只看到 socket 突然断开。
-
-进程退出后自然无法发送最终 RPC event，因此不需要虚构 `host.exited`。最终 exit code 应由父级进程从 Hostra process handle 观察。
+它们可以保留 structured log，但暂不要求外部客户端依赖。
 
 ---
 
-## 10. CDP 的职责边界
+## 8. Event Sequence
 
-启用 `HOSTRA_CDP_PORT` 后，标准 CDP client、Playwright、Puppeteer 或其它工具可以承担 Renderer/WebContents 层能力，例如：
+每个 Hostra session 维护单调递增的：
+
+```text
+seq
+```
+
+例如：
+
+```text
+17 window.created
+18 subprocess.started
+19 window.closed
+20 subprocess.exited
+21 host.shuttingDown
+```
+
+`seq` 的作用：
+
+- 明确事件发生顺序；
+- 便于自动化断言；
+- 便于诊断丢失或重连后的 observation gap；
+- 不要求跨 Hostra process 持久化。
+
+建议所有 WS lifecycle notification 都带 `seq`。
+
+---
+
+## 9. Snapshot + Events 模型
+
+Lifecycle event 不能代替当前状态查询。
+
+一个客户端可能在 Hostra 已经运行后才连接，此时它已经错过：
+
+```text
+window.created
+subprocess.started
+```
+
+因此推荐正式采用：
+
+```text
+Snapshot
++
+Events
+```
+
+### 9.1 推荐 `getHostState()`
+
+可以将现有零散查询逐步收敛为：
+
+```text
+getHostState()
+```
+
+示例：
+
+```json
+{
+  "seq": 27,
+  "host": {
+    "state": "running",
+    "pid": 12345,
+    "platform": "win32",
+    "arch": "x64",
+    "electronVersion": "...",
+    "rpcEndpoint": "ws://127.0.0.1:43817",
+    "cdpEndpoint": "http://127.0.0.1:45122"
+  },
+  "subprocess": {
+    "configured": true,
+    "state": "running",
+    "pid": 23456
+  },
+  "windows": [
+    {
+      "windowId": "main",
+      "webContentsId": 3,
+      "title": "Example",
+      "url": "http://127.0.0.1:4174/"
+    }
+  ]
+}
+```
+
+客户端流程：
+
+```text
+connect WS
+-> getHostState() returns seq=27
+-> observe seq=28,29,30...
+```
+
+这样连接较晚的客户端仍然可以先获得一致 snapshot，再继续追踪事件。
+
+### 9.2 与现有 API 的兼容
+
+现有：
+
+```text
+getVersion
+getPlatform
+getArch
+getAppPath
+getAllWindows
+```
+
+可以继续保留。
+
+`getHostState()` 是面向 observability 的聚合 snapshot，不要求立即删除旧 RPC。
+
+---
+
+## 10. Window 与 CDP Target 关联
+
+Hostra Window identity 与 CDP target identity 是不同概念。
+
+Hostra 应提供最小关联信息：
+
+```text
+windowId
+webContentsId
+current URL / title (diagnostic metadata)
+```
+
+推荐关系：
+
+```text
+Hostra RPC
+  -> getHostState()/getAllWindows()
+  -> windowId + webContentsId + URL/title
+
+CDP client
+  -> enumerate targets
+  -> resolve target
+  -> 后续 Renderer 操作全部走 CDP
+```
+
+Hostra 不增加：
+
+```text
+getCdpTargetId(windowId)
+attachCdp(windowId)
+evaluateInWindow(windowId, script)
+```
+
+除非未来证明标准 target correlation 不足，再单独设计最小映射能力。
+
+---
+
+## 11. CDP Debug Plane
+
+启用 CDP 后，标准 CDP client、Playwright、Puppeteer 或其它工具可以承担：
 
 - target enumeration；
 - JavaScript evaluation；
 - DOM inspection；
-- console capture；
-- network inspection；
 - Page lifecycle；
 - navigation diagnostics；
+- console capture；
+- network inspection；
 - input dispatch；
 - screenshot。
 
-Hostra RPC 不增加以下方法：
+Hostra 不代理这些操作。
 
-```text
-querySelector
-click
-type
-evaluate
-screenshot
-waitForSelector
-getNetworkRequests
-waitWindowReady
-```
+### 11.1 `devTools` 与 CDP 独立
 
-这些都不属于 Hostra 的 Host-level contract。
+`openWindow({ devTool: ... })` 控制窗口的本地 DevTools UI 能力。
 
-### 10.1 `devTools` 与 CDP 不应视为同一概念
+`HOSTRA_CDP_PORT` 控制 Electron instance 的 remote debugging capability。
 
-`openWindow({ devTool: ... })` 控制窗口对本地 DevTools UI 的配置。
+两者应独立建模。
 
-`HOSTRA_CDP_PORT` 控制整个 Electron instance 的 remote debugging capability。
-
-两者独立建模，不应让 window-level `devTool` 成为 E2E 是否可调试的隐式开关。
-
-对于 `devTools: false` 与 remote CDP target 的实际 Electron 行为，应增加真实 smoke test 固化，而不是依赖假设。
+对于 `devTools: false` 与 remote CDP target 的实际行为，应在 Hostra 当前 pinned Electron 上做真实 smoke test 固化。
 
 ---
 
-## 11. Electron 版本确定性
+## 12. Electron 版本确定性
 
-### 11.1 当前风险
+Hostra release 应固定默认 Electron version，而不是安装时查询 `electron/latest`。
 
-Hostra 当前安装阶段获取 `electron/latest`，导致同一个 Hostra 版本在不同安装时间可能得到不同 Electron 版本。
-
-这会造成：
-
-```text
-Hostra code 没变
-测试代码没变
-Electron implicit version 变了
-结果发生变化
-```
-
-### 11.2 建议
-
-Hostra release 应固定一个默认 Electron version。
-
-例如在 package metadata 中维护：
-
-```json
-{
-  "hostra": {
-    "electronVersion": "<pinned-version>"
-  }
-}
-```
-
-`download-electron.js` 默认读取 package 中固定版本，而不是查询 `electron/latest`。
-
-允许显式 override：
+可以保留显式 override：
 
 ```env
 HOSTRA_ELECTRON_VERSION=<version>
 ```
 
-优先级：
+规则：
 
 ```text
 explicit HOSTRA_ELECTRON_VERSION
-    > package pinned Electron version
+  > package pinned Electron version
 ```
 
-不再存在默认 `latest` fallback。
+不再有默认 `latest` fallback。
 
-一个可重复的 Hostra 环境至少应该能描述为：
+原因不仅是测试稳定性，也因为以下 Hostra 能力都依赖 Electron/Chromium 的具体行为：
 
-```text
-Hostra version
-+ Electron version
-+ host OS/arch
-```
+- CDP dynamic port；
+- target discovery；
+- `DevToolsActivePort` 等实现细节；
+- BrowserWindow/WebContents 行为。
+
+因此这些能力应针对 pinned Electron 版本 qualification。
 
 ---
 
-## 12. Automated Smoke / E2E Tests
+## 13. 建议的实现结构调整
 
-Hostra 自身应增加最小自动化测试，不测试上层业务。
-
-### 12.1 Unit tests
-
-覆盖：
-
-- `.env` parsing；
-- config priority；
-- command parsing；
-- endpoint/config validation；
-- Host event serialization；
-- Electron version resolution。
-
-### 12.2 RPC integration tests
-
-覆盖：
-
-- token accepted/rejected；
-- invalid JSON；
-- method not found；
-- `getHostInfo`；
-- window registry semantics；
-- `getAllWindows()` metadata；
-- event notification serialization。
-
-如果 BrowserWindow 依赖 Electron runtime，则不强行在纯 Node 层模拟全部行为。
-
-### 12.3 Real Electron smoke test
-
-至少覆盖：
+当前 `rpc-server.js` 同时承担 transport 和 Window registry。随着 lifecycle observability 加入，建议逐步拆分：
 
 ```text
-Hostra boots
--> emits hostra.ready
--> RPC accepts connection
--> getHostInfo succeeds
--> openWindow(local fixture)
--> window.created
--> getAllWindows exposes windowId + webContentsId
--> closeWindow
--> window.closed
--> Hostra shuts down cleanly
+main.js
+  |
+  v
+HostRuntime
+  |
+  +-- WindowManager
+  |    +-- open
+  |    +-- close
+  |    +-- registry
+  |
+  +-- SubprocessSupervisor
+  |    +-- spawn
+  |    +-- exit observation
+  |    +-- shutdown convergence
+  |
+  +-- HostEventBus
+  |    +-- seq
+  |    +-- lifecycle facts
+  |
+  +-- HostState snapshot
+  |
+  +-- RpcServer adapter
 ```
 
-注意：不通过 Hostra RPC 判断页面是否 `loaded`；页面生命周期由 CDP smoke test 验证。
+RPC server 只负责：
 
-### 12.4 Subprocess smoke test
+- connection/auth；
+- JSON-RPC decode/encode；
+- method dispatch；
+- event broadcast。
 
-覆盖：
-
-```text
-Hostra
--> spawn fixture child
--> subprocess.started
--> child exits 0
--> subprocess.exited
--> Hostra exits
-```
-
-以及：
-
-```text
-Hostra shutdown
--> SIGTERM child
--> grace period
--> necessary SIGKILL fallback
-```
-
-### 12.5 CDP smoke test
-
-启用 `HOSTRA_CDP_PORT`：
-
-```text
-Hostra boots
--> open local fixture window
--> connect CDP
--> enumerate renderer target
--> correlate target with Hostra window
--> observe page lifecycle via CDP
--> evaluate simple expression / read page marker
--> disconnect
-```
-
-目标不是测试 CDP 本身，而是证明：
-
-1. Hostra 正确开启了 Electron remote debugging；
-2. Renderer target 可以被标准工具访问；
-3. Hostra window 与 CDP target 可以可靠关联；
-4. Hostra 不需要复制 Renderer lifecycle API。
-
-Linux CI 如需要显示服务，可使用 Xvfb；不要因为 CI 环境而把真实 Electron smoke test退化成纯 mock。
+它不直接拥有 Window/Subprocess state。
 
 ---
 
-## 13. 建议实施顺序
+## 14. Automated Qualification
 
-### Phase A — Deterministic Host
+### 14.1 Bootstrap / endpoint test
 
-1. 固定默认 Electron version；
-2. 增加 `HOSTRA_CDP_PORT`；
-3. 增加 `hostra.ready` structured stdout record；
-4. 增加 `getHostInfo()`。
-
-### Phase B — Host-level Observability
-
-5. `getAllWindows()` 增加 `webContentsId` 等最小关联信息；
-6. 增加 `window.created` / `window.closed` notifications；
-7. 增加 `subprocess.*` notifications；
-8. 增加 `host.shuttingDown` / `host.rpcClosing` notifications。
-
-### Phase C — Qualification
-
-9. Node-level unit/integration tests；
-10. Real Electron smoke test；
-11. CDP target correlation + Page lifecycle smoke test；
-12. subprocess shutdown/escalation test；
-13. CI qualification on supported desktop environments。
-
----
-
-## 14. 初步完成标准
-
-Hostra 可以被认为具备 E2E Host baseline，当以下链路可自动重复通过：
+固定端口：
 
 ```text
 spawn Hostra
--> receive hostra.ready
--> connect Hostra RPC
--> inspect getHostInfo
--> create BrowserWindow
--> observe window.created
--> correlate Hostra window with CDP target
--> inspect Renderer/Page through CDP
--> close BrowserWindow
--> observe window.closed
--> observe subprocess lifecycle
--> trigger shutdown
--> child-process lifecycle converges
--> Hostra exits with expected code
+-> receive structured hostra.ready
+-> endpoints equal requested fixed ports
 ```
 
-并且：
+随机端口：
 
-- 相同 Hostra 版本默认使用相同 Electron 版本；
-- 自动化不依赖固定 sleep；
-- 自动化不依赖解析自然语言日志；
-- Hostra RPC 不承载 Renderer/Page 自动化语义；
-- Renderer/Page lifecycle 以 CDP 为唯一标准入口；
-- CDP 默认关闭；
-- Hostra 只维护 Host-level authority 和物理事实。
+```text
+HOSTRA_RPC_PORT=0
+HOSTRA_CDP_PORT=0
+-> spawn Hostra
+-> receive hostra.ready
+-> rpcEndpoint has actual non-zero port
+-> cdpEndpoint has actual non-zero port
+-> both endpoints connect successfully
+```
+
+### 14.2 Lifecycle WS test
+
+```text
+connect RPC
+-> getHostState snapshot
+-> openWindow
+-> observe window.created seq=N
+-> closeWindow
+-> observe window.closed seq=N+1
+```
+
+### 14.3 Subprocess lifecycle test
+
+```text
+Hostra with fixture child
+-> subprocess.started
+-> child exits
+-> subprocess.exited
+```
+
+并验证异常 spawn -> `subprocess.spawnFailed`。
+
+### 14.4 CDP smoke test
+
+```text
+Hostra boots with CDP enabled
+-> open local fixture window
+-> connect cdpEndpoint
+-> enumerate target
+-> correlate target with Hostra window
+-> evaluate/read a simple page marker
+```
+
+Hostra smoke test只证明 CDP endpoint 和 target correlation 可用，不测试 CDP 本身。
+
+### 14.5 Shutdown test
+
+```text
+running Hostra
+-> trigger shutdown
+-> observe host.shuttingDown
+-> WS eventually closes
+-> parent observes final process exit code
+```
 
 ---
 
 ## 15. 非目标
 
-本轮明确不做：
+本轮不做：
 
-- 多 Hostra 实例并行隔离；
-- 自动分配 RPC/CDP 端口；
+- Hostra 自己的 DOM/query/click/type/evaluate/screenshot RPC；
+- CDP proxy；
 - Playwright/Puppeteer wrapper；
-- DOM/query/click/type API；
-- screenshot RPC；
-- Hostra 自己的 Page lifecycle RPC；
-- 业务应用 ready protocol；
-- 业务专用 RPC；
-- subprocess restart / crash recovery policy；
-- Electron sandbox policy redesign；
-- CDP proxy。
+- Renderer/Page lifecycle translation；
+- 业务 application ready protocol；
+- 对外公开 IPC pipe；
+- fd-based public event channel；
+- lifecycle event 持久化；
+- event replay log；
+- 多进程分布式 event bus。
+
+随机端口属于本轮 endpoint discovery scope，但不等于解决完整的多实例并行隔离问题；例如 single-instance policy、userData isolation 等仍可另行设计。
 
 ---
 
-## 16. Open Questions
+## 16. 建议实施顺序
 
-在进入实现前，需要用真实 Electron smoke test确认以下细节：
+### Phase A — Endpoint Discovery
 
-1. `devTools: false` 时 remote CDP target 的可访问行为；
-2. `webContentsId` 与 CDP target 的最佳稳定关联方式；
-3. Hostra ready record 应由 Electron main process 直接输出，还是由外层 `hostra.js` 转发并标准化；
-4. `hostra.ready` 与 `HOSTRA_SUBCMD` spawn 的精确时序；
-5. RPC closing event 在 shutdown 路径中可保证到什么程度；
-6. Electron pinned version 在 package metadata 中的最终存放位置和发布流程。
+1. RPC server 支持 `HOSTRA_RPC_PORT=0`；
+2. CDP 支持 `HOSTRA_CDP_PORT=0`；
+3. CLI <-> Electron Main private bootstrap IPC；
+4. `hostra.ready` structured stdout；
+5. 固定默认 Electron version；
+6. fixed/random endpoint smoke tests。
+
+### Phase B — Host Runtime Model
+
+7. 从 RPC transport 中抽离 Window registry；
+8. 建立 SubprocessSupervisor；
+9. 建立 HostEventBus + monotonic `seq`；
+10. 建立 HostState snapshot。
+
+### Phase C — Public Observability
+
+11. `getHostState()`；
+12. `window.created` / `window.closed`；
+13. `subprocess.started` / `spawnFailed` / `exited`；
+14. `host.shuttingDown`；
+15. lifecycle WS tests。
+
+### Phase D — CDP Qualification
+
+16. Window `webContentsId` 暴露；
+17. CDP target correlation test；
+18. real Electron CDP smoke test；
+19. supported desktop CI qualification。
+
+---
+
+## 17. 完成标准
+
+Hostra 可以认为完成这一轮改造，当以下链路稳定成立：
+
+```text
+spawn Hostra
+-> private bootstrap IPC completes
+-> receive hostra.ready with actual endpoints
+-> connect Hostra RPC
+-> getHostState snapshot
+-> observe ordered Host/Window/Subprocess lifecycle notifications
+-> connect CDP directly for Renderer diagnostics
+-> shutdown
+-> observe host.shuttingDown
+-> WS closes
+-> parent observes Hostra process exit
+```
+
+并且：
+
+- `RPC_PORT=0` 和 `CDP_PORT=0` 都能可靠发现最终 endpoint；
+- lifecycle event 只走公开 WebSocket control plane；
+- private pipe/IPC 只服务 bootstrap discovery；
+- lifecycle event 带 session-local monotonic `seq`；
+- snapshot 与 event 能组成一致 observation 模型；
+- Renderer/Page 事实不被 Hostra RPC 重复建模；
+- Hostra RPC transport 不再拥有核心 lifecycle state；
+- 相同 Hostra 版本默认使用相同 Electron 版本；
+- CDP 默认关闭，只有显式配置时启用。
