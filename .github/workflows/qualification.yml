@@ -1,0 +1,36 @@
+name: Hostra qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  qualification:
+    name: ${{ matrix.os }} / Node 22
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies and pinned Electron
+        run: npm ci
+        env:
+          HOSTRA_MIRROR: https://github.com/electron/electron/releases/download/
+
+      - name: Run qualification on Windows
+        if: runner.os == 'Windows'
+        run: npm test
+
+      - name: Run qualification on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm test

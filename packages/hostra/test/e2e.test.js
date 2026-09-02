@@ -469,3 +469,99 @@ test('spawn failure occurs after ready and converges through the error path', {
   assert.match(hostra.output().stderr, /Failed to spawn subprocess \(ENOENT\)/);
   assert.equal((hostra.output().stdout.match(/"type":"hostra.ready"/g) || []).length, 1);
 });
+
+test('invalid RPC port text reaches the Main validator unchanged', {
+  skip: !fs.existsSync(electronPath),
+  timeout: 30_000
+}, async (t) => {
+  const hostra = spawnHostra({ HOSTRA_RPC_PORT: '123abc' });
+  t.after(hostra.cleanup);
+
+  await assert.rejects(hostra.ready, /exited before ready/);
+  const exit = await withTimeout(waitForExit(hostra.child), 10_000, 'invalid-port exit');
+  assert.notEqual(exit.code, 0);
+  assert.match(hostra.output().stderr, /HOSTRA_RPC_PORT must be an integer/);
+  assert.match(hostra.output().stdout, /rpcPort: '123abc'/);
+});
+
+test('reconnect recovers the same session and restart creates a new session', {
+  skip: !fs.existsSync(electronPath),
+  timeout: 45_000
+}, async (t) => {
+  const firstHost = spawnHostra({ HOSTRA_RPC_PORT: '0' });
+  t.after(firstHost.cleanup);
+  const firstReady = await firstHost.ready;
+  const clientA = await connectRpc(firstReady.data.rpcEndpoint);
+  await clientA.call('openWindow', { id: 'reconnect' });
+  const created = await clientA.waitForNotification(
+    (message) => message.params?.type === 'window.created',
+    'window.created before reconnect'
+  );
+  const beforeDisconnect = await clientA.call('getHostState');
+  assert.equal(beforeDisconnect.sessionId, firstReady.sessionId);
+  assert.equal(beforeDisconnect.seq, created.params.seq);
+
+  const clientAClosed = new Promise((resolve) => clientA.socket.once('close', resolve));
+  clientA.socket.terminate();
+  await withTimeout(clientAClosed, 5_000, 'client A disconnect');
+
+  const clientB = await connectRpc(firstReady.data.rpcEndpoint);
+  const recovered = await clientB.call('getHostState');
+  assert.equal(recovered.sessionId, firstReady.sessionId);
+  assert.equal(recovered.seq, beforeDisconnect.seq);
+  assert.deepEqual(recovered.windows, beforeDisconnect.windows);
+
+  await clientB.call('closeWindow', { windowId: 'reconnect' });
+  const closed = await clientB.waitForNotification(
+    (message) => message.params?.type === 'window.closed',
+    'window.closed after reconnect'
+  );
+  assert.equal(closed.params.seq, recovered.seq + 1);
+  const firstExit = await withTimeout(waitForExit(firstHost.child), 10_000, 'first session exit');
+  assert.equal(firstExit.code, 0, firstHost.output().stderr);
+
+  const secondHost = spawnHostra({ HOSTRA_RPC_PORT: '0' });
+  t.after(secondHost.cleanup);
+  const secondReady = await secondHost.ready;
+  assert.notEqual(secondReady.sessionId, firstReady.sessionId);
+  const secondClient = await connectRpc(secondReady.data.rpcEndpoint);
+  const fresh = await secondClient.call('getHostState');
+  assert.equal(fresh.sessionId, secondReady.sessionId);
+  assert.equal(fresh.seq, 0);
+  await secondClient.call('openWindow', { id: 'new-session' });
+  await secondClient.call('closeWindow', { windowId: 'new-session' });
+  const secondExit = await withTimeout(waitForExit(secondHost.child), 10_000, 'second session exit');
+  assert.equal(secondExit.code, 0, secondHost.output().stderr);
+});
+
+test('CLI SIGTERM produces signal shutdown and converges before exit', {
+  skip: !fs.existsSync(electronPath) || process.platform === 'win32',
+  timeout: 40_000
+}, async (t) => {
+  const hostra = spawnHostra({ HOSTRA_RPC_PORT: '0', HOSTRA_CDP_PORT: '0' });
+  t.after(hostra.cleanup);
+  const ready = await hostra.ready;
+  const rpc = await connectRpc(ready.data.rpcEndpoint);
+  await rpc.call('openWindow', { id: 'signal-window', loadUrl: stubbornFixturePath });
+  await rpc.waitForNotification(
+    (message) => message.params?.type === 'window.created',
+    'signal fixture creation'
+  );
+  const target = await waitForCdpTarget(ready.data.cdpEndpoint, 'stubborn.html');
+  await evaluateValue(target, 'window.__HOSTRA_STUBBORN_MARKER__', 'ready');
+
+  hostra.child.kill('SIGTERM');
+  const shuttingDown = await rpc.waitForNotification(
+    (message) => message.params?.type === 'host.shuttingDown',
+    'signal shutdown'
+  );
+  assert.deepEqual(shuttingDown.params.data, { reason: 'signal', signal: 'SIGTERM' });
+  const duringShutdown = await rpc.call('getHostState');
+  assert.equal(duringShutdown.host.state, 'shutting-down');
+  await rpc.waitForNotification(
+    (message) => message.params?.type === 'window.closed',
+    'signal shutdown window convergence'
+  );
+  const exit = await withTimeout(waitForExit(hostra.child), 10_000, 'signal shutdown exit');
+  assert.equal(exit.code, 0, hostra.output().stderr);
+});

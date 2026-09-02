@@ -54,11 +54,10 @@ function loadDotEnvFile(filePath) {
 function loadConfig() {
   loadDotEnvFile(path.join(process.cwd(), '.env'));
 
-  const envPort = Number.parseInt(process.env.HOSTRA_RPC_PORT || '', 10);
   const envConfigDir = process.env.HOSTRA_CONFIG_DIR || process.cwd();
   return {
     appName: process.env.HOSTRA_APP_NAME || null,
-    port: Number.isFinite(envPort) ? envPort : 9333,
+    rpcPort: process.env.HOSTRA_RPC_PORT == null ? '9333' : process.env.HOSTRA_RPC_PORT,
     cmd: process.env.HOSTRA_SUBCMD || null,
     configDir: envConfigDir,
     rpcToken: process.env.HOSTRA_RPC_TOKEN || null,
@@ -82,7 +81,7 @@ if (config.appName) {
   env.HOSTRA_APP_NAME = config.appName;
 }
 
-env.HOSTRA_RPC_PORT = config.port.toString();
+env.HOSTRA_RPC_PORT = config.rpcPort;
 
 if (config.cmd) {
   env.HOSTRA_SUBCMD = config.cmd;

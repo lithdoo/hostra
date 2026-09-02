@@ -34,9 +34,16 @@ function parsePort(name, fallback, enabled) {
   return port;
 }
 
-const rpcPort = parsePort('HOSTRA_RPC_PORT', 9333, process.env.HOSTRA_RPC_PORT != null);
 const cdpEnabled = process.env.HOSTRA_CDP_PORT != null;
-const cdpPort = parsePort('HOSTRA_CDP_PORT', null, cdpEnabled);
+let rpcPort;
+let cdpPort;
+let configError = null;
+try {
+  rpcPort = parsePort('HOSTRA_RPC_PORT', 9333, process.env.HOSTRA_RPC_PORT != null);
+  cdpPort = parsePort('HOSTRA_CDP_PORT', null, cdpEnabled);
+} catch (error) {
+  configError = error;
+}
 const appName = process.env.HOSTRA_APP_NAME;
 const subCmd = process.env.HOSTRA_SUBCMD;
 const configDir = process.env.HOSTRA_CONFIG_DIR || process.cwd();
@@ -440,6 +447,7 @@ function emitReady(cdpEndpoint) {
 }
 
 async function bootstrap() {
+  if (configError) throw configError;
   const activePortPath = await configureCdp();
   await app.whenReady();
   rpcServer = await createRpcServer({
