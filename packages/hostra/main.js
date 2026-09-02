@@ -490,6 +490,16 @@ process.on('SIGTERM', () => {
   if (runtimeReady) requestShutdown('signal', { signal: 'SIGTERM' });
   else app.exit(0);
 });
+if (process.platform !== 'win32') {
+  process.on('SIGHUP', () => {
+    if (runtimeReady) requestShutdown('signal', { signal: 'SIGINT' });
+    else app.exit(0);
+  });
+  process.on('SIGUSR2', () => {
+    if (runtimeReady) requestShutdown('signal', { signal: 'SIGTERM' });
+    else app.exit(0);
+  });
+}
 
 app.on('window-all-closed', () => {
   if (runtimeReady && process.platform !== 'darwin') {

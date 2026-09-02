@@ -105,8 +105,7 @@ console.log('[hostra] Electron path:', electronPath);
 const child = spawn(electronPath, [mainPath], {
   stdio: 'inherit',
   cwd: path.join(__dirname, '..'),
-  env,
-  detached: process.platform !== 'win32'
+  env
 });
 
 function forwardSignal(signal) {
@@ -115,7 +114,10 @@ function forwardSignal(signal) {
     if (process.platform === 'win32') {
       child.kill(signal);
     } else {
-      process.kill(-child.pid, signal);
+      // Chromium reserves SIGINT/SIGTERM on POSIX. Relay through signals that
+      // remain available to Electron's Node main process; main.js restores
+      // the original public signal identity.
+      child.kill(signal === 'SIGTERM' ? 'SIGUSR2' : 'SIGHUP');
     }
   }
 }

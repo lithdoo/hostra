@@ -226,10 +226,15 @@ async function evaluateValue(target, expression, expectedValue) {
     let id = 0;
     while (Date.now() < deadline) {
       id += 1;
-      const response = new Promise((resolve) => {
+      const response = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          socket.off('message', onMessage);
+          reject(new Error('CDP Runtime.evaluate attempt timed out'));
+        }, 2_000);
         const onMessage = (data) => {
           const message = JSON.parse(data.toString());
           if (message.id === id) {
+            clearTimeout(timer);
             socket.off('message', onMessage);
             resolve(message);
           }
@@ -241,7 +246,13 @@ async function evaluateValue(target, expression, expectedValue) {
         method: 'Runtime.evaluate',
         params: { expression, returnByValue: true }
       }));
-      const message = await withTimeout(response, 2_000, 'CDP Runtime.evaluate');
+      let message;
+      try {
+        message = await response;
+      } catch (error) {
+        if (Date.now() >= deadline) throw error;
+        continue;
+      }
       if (message.result?.result?.value === expectedValue) return;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
