@@ -17,24 +17,20 @@ function resolveElectronVersion(env = process.env) {
   return version;
 }
 
-function normalizeExecutablePermissions(
-  targetDir,
-  platform = process.platform,
-  fileSystem = fs
-) {
+function normalizeExecutablePermissions(targetDir, platform = process.platform) {
   if (platform !== 'linux') return;
 
   for (const relativePath of LINUX_EXECUTABLES) {
     const executablePath = path.join(targetDir, relativePath);
-    if (!fileSystem.existsSync(executablePath)) continue;
-    const mode = fileSystem.statSync(executablePath).mode & 0o7777;
-    fileSystem.chmodSync(executablePath, mode | 0o111);
+    if (!fs.existsSync(executablePath)) continue;
+    const mode = fs.statSync(executablePath).mode & 0o7777;
+    fs.chmodSync(executablePath, mode | 0o111);
   }
 }
 
-function extractElectronArchive(zip, targetDir, platform = process.platform, fileSystem = fs) {
+function extractElectronArchive(zip, targetDir, platform = process.platform) {
   zip.extractAllTo(targetDir, true, true);
-  normalizeExecutablePermissions(targetDir, platform, fileSystem);
+  normalizeExecutablePermissions(targetDir, platform);
 }
 
 function downloadFile(url, destPath, redirects = 0) {
@@ -93,13 +89,7 @@ async function downloadElectron() {
     const mirrorBase = process.env.HOSTRA_MIRROR || 'https://npmmirror.com/mirrors/electron/';
     console.log(`Using mirror: ${mirrorBase}`);
 
-    const platformMap = { win32: 'win32', darwin: 'darwin', linux: 'linux' };
-    const archMap = { x64: 'x64', arm64: 'arm64', ia32: 'ia32' };
-
-    const targetPlatform = platformMap[platform] || platform;
-    const targetArch = archMap[arch] || arch;
-
-    const zipName = `electron-v${version}-${targetPlatform}-${targetArch}.zip`;
+    const zipName = `electron-v${version}-${platform}-${arch}.zip`;
     const zipUrl = `${mirrorBase}v${version}/${zipName}`;
     const zipPath = path.join(tempDir, zipName);
 

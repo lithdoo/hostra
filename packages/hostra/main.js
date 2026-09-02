@@ -34,16 +34,6 @@ function parsePort(name, fallback, enabled) {
   return port;
 }
 
-const cdpEnabled = process.env.HOSTRA_CDP_PORT != null;
-let rpcPort;
-let cdpPort;
-let configError = null;
-try {
-  rpcPort = parsePort('HOSTRA_RPC_PORT', 9333, process.env.HOSTRA_RPC_PORT != null);
-  cdpPort = parsePort('HOSTRA_CDP_PORT', null, cdpEnabled);
-} catch (error) {
-  configError = error;
-}
 const appName = process.env.HOSTRA_APP_NAME;
 const subCmd = process.env.HOSTRA_SUBCMD;
 const configDir = process.env.HOSTRA_CONFIG_DIR || process.cwd();
@@ -54,7 +44,6 @@ const state = {
   sessionId: crypto.randomUUID(),
   seq: 0,
   shuttingDown: false,
-  shutdownReason: null,
   subprocess: null,
   windows: new Map()
 };
@@ -74,8 +63,8 @@ if (appName) {
 }
 
 console.log('[Main] App name:', appName);
-console.log('[Main] Requested RPC port:', rpcPort);
-console.log('[Main] Requested CDP port:', cdpEnabled ? cdpPort : 'disabled');
+console.log('[Main] Requested RPC port:', process.env.HOSTRA_RPC_PORT ?? 9333);
+console.log('[Main] Requested CDP port:', process.env.HOSTRA_CDP_PORT ?? 'disabled');
 console.log('[Main] SubCmd:', subCmd);
 console.log('[Main] Config dir:', configDir);
 console.log('[Main] RPC token enabled:', Boolean(rpcToken));
@@ -304,7 +293,6 @@ function requestShutdown(reason, extra = {}) {
 
   emitLifecycle('host.shuttingDown', { reason, ...extra }, () => {
     state.shuttingDown = true;
-    state.shutdownReason = reason;
   });
 
   for (const info of state.windows.values()) {
@@ -405,7 +393,7 @@ async function retryUntilDeadline(operation, deadline, description) {
   throw new Error(`${description} timed out after 10000ms: ${lastError?.message || 'not available'}`);
 }
 
-async function configureCdp() {
+async function configureCdp(cdpEnabled, cdpPort) {
   if (!cdpEnabled) return null;
 
   if (cdpPort > 0) {
@@ -422,7 +410,7 @@ async function configureCdp() {
   return activePortPath;
 }
 
-async function resolveCdpEndpoint(activePortPath) {
+async function resolveCdpEndpoint(cdpEnabled, cdpPort, activePortPath) {
   if (!cdpEnabled) return null;
   const deadline = Date.now() + CDP_DISCOVERY_TIMEOUT_MS;
   const actualPort = cdpPort === 0
@@ -447,8 +435,10 @@ function emitReady(cdpEndpoint) {
 }
 
 async function bootstrap() {
-  if (configError) throw configError;
-  const activePortPath = await configureCdp();
+  const rpcPort = parsePort('HOSTRA_RPC_PORT', 9333, process.env.HOSTRA_RPC_PORT != null);
+  const cdpEnabled = process.env.HOSTRA_CDP_PORT != null;
+  const cdpPort = parsePort('HOSTRA_CDP_PORT', null, cdpEnabled);
+  const activePortPath = await configureCdp(cdpEnabled, cdpPort);
   await app.whenReady();
   rpcServer = await createRpcServer({
     host: LOOPBACK_HOST,
@@ -457,7 +447,7 @@ async function bootstrap() {
     methods
   });
 
-  const cdpEndpoint = await resolveCdpEndpoint(activePortPath);
+  const cdpEndpoint = await resolveCdpEndpoint(cdpEnabled, cdpPort, activePortPath);
   process.env.HOSTRA_RPC_PORT = String(rpcServer.port);
   if (cdpEndpoint) {
     process.env.HOSTRA_CDP_PORT = String(new URL(cdpEndpoint).port);
@@ -482,23 +472,20 @@ async function failStartup(error) {
   app.exit(1);
 }
 
-process.on('SIGINT', () => {
-  if (runtimeReady) requestShutdown('signal', { signal: 'SIGINT' });
+function handleShutdownSignal(signal) {
+  if (runtimeReady) requestShutdown('signal', { signal });
   else app.exit(0);
-});
-process.on('SIGTERM', () => {
-  if (runtimeReady) requestShutdown('signal', { signal: 'SIGTERM' });
-  else app.exit(0);
-});
+}
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => handleShutdownSignal(signal));
+}
+
 if (process.platform !== 'win32') {
-  process.on('SIGHUP', () => {
-    if (runtimeReady) requestShutdown('signal', { signal: 'SIGINT' });
-    else app.exit(0);
-  });
-  process.on('SIGUSR2', () => {
-    if (runtimeReady) requestShutdown('signal', { signal: 'SIGTERM' });
-    else app.exit(0);
-  });
+  const relaySignals = { SIGHUP: 'SIGINT', SIGUSR2: 'SIGTERM' };
+  for (const [relaySignal, originalSignal] of Object.entries(relaySignals)) {
+    process.on(relaySignal, () => handleShutdownSignal(originalSignal));
+  }
 }
 
 app.on('window-all-closed', () => {
@@ -506,8 +493,6 @@ app.on('window-all-closed', () => {
     requestShutdown('window-all-closed');
   }
 });
-app.on('activate', () => {});
-
 ipcMain.handle('get-version', () => process.versions.electron);
 ipcMain.handle('get-path', (event, name) => app.getPath(name));
 

@@ -8,6 +8,10 @@ const mainPath = path.join(__dirname, '..', 'main.js');
 
 const electronExe = process.platform === 'win32' ? 'electron.exe' : 'electron';
 const electronPath = path.join(electronBinDir, electronExe);
+const POSIX_SIGNAL_RELAY = {
+  SIGINT: 'SIGHUP',
+  SIGTERM: 'SIGUSR2'
+};
 
 function parseDotEnv(content) {
   const result = {};
@@ -117,7 +121,7 @@ function forwardSignal(signal) {
       // Chromium reserves SIGINT/SIGTERM on POSIX. Relay through signals that
       // remain available to Electron's Node main process; main.js restores
       // the original public signal identity.
-      child.kill(signal === 'SIGTERM' ? 'SIGUSR2' : 'SIGHUP');
+      child.kill(POSIX_SIGNAL_RELAY[signal]);
     }
   }
 }

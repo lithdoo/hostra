@@ -63,9 +63,6 @@ function createRpcServer(portOrOptions = 9333, legacyOptions = {}) {
         endpoint: `ws://${host}:${actualPort}`,
         wss,
         notify,
-        call(method, params) {
-          notify(method, params);
-        },
         close() {
           if (closed) return Promise.resolve();
           closed = true;

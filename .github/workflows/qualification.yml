@@ -39,22 +39,4 @@ jobs:
 
       - name: Run qualification on Linux
         if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set +e
-          xvfb-run --auto-servernum npm test 2>&1 | tee /tmp/hostra-qualification.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            tail -c 6000 /tmp/hostra-qualification.log | node -e '
-              let text = "";
-              process.stdin.on("data", chunk => { text += chunk; });
-              process.stdin.on("end", () => {
-                const escaped = text
-                  .replace(/%/g, "%25")
-                  .replace(/\r/g, "%0D")
-                  .replace(/\n/g, "%0A");
-                console.log(`::error title=Linux qualification failure::${escaped}`);
-              });
-            '
-          fi
-          exit "$status"
+        run: xvfb-run --auto-servernum npm test
