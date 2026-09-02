@@ -4,6 +4,7 @@ const https = require('https');
 const AdmZip = require('adm-zip');
 
 const electronBinDir = path.join(__dirname, '..', 'electron_bin');
+const LINUX_EXECUTABLES = ['electron', 'chrome-sandbox', 'chrome_crashpad_handler'];
 
 function resolveElectronVersion(env = process.env) {
   const packageJson = require('../package.json');
@@ -14,6 +15,26 @@ function resolveElectronVersion(env = process.env) {
   }
 
   return version;
+}
+
+function normalizeExecutablePermissions(
+  targetDir,
+  platform = process.platform,
+  fileSystem = fs
+) {
+  if (platform !== 'linux') return;
+
+  for (const relativePath of LINUX_EXECUTABLES) {
+    const executablePath = path.join(targetDir, relativePath);
+    if (!fileSystem.existsSync(executablePath)) continue;
+    const mode = fileSystem.statSync(executablePath).mode & 0o7777;
+    fileSystem.chmodSync(executablePath, mode | 0o111);
+  }
+}
+
+function extractElectronArchive(zip, targetDir, platform = process.platform, fileSystem = fs) {
+  zip.extractAllTo(targetDir, true, true);
+  normalizeExecutablePermissions(targetDir, platform, fileSystem);
 }
 
 function downloadFile(url, destPath, redirects = 0) {
@@ -88,7 +109,7 @@ async function downloadElectron() {
 
     console.log(`Extracting to: ${electronBinDir}`);
     const zip = new AdmZip(zipPath);
-    zip.extractAllTo(electronBinDir, true);
+    extractElectronArchive(zip, electronBinDir);
 
     console.log('Electron binary download completed successfully!');
   } catch (error) {
@@ -104,4 +125,9 @@ if (require.main === module) {
   downloadElectron();
 }
 
-module.exports = { downloadElectron, resolveElectronVersion };
+module.exports = {
+  downloadElectron,
+  extractElectronArchive,
+  normalizeExecutablePermissions,
+  resolveElectronVersion
+};
