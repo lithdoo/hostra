@@ -138,6 +138,8 @@ RPC server 必须显式绑定：
 ws://127.0.0.1:<actual-port>
 ```
 
+固定 RPC 端口 bind 失败属于 startup failure。
+
 `HOSTRA_RPC_TOKEN` 语义保持现状；token 不出现在 `hostra.ready`、snapshot 或 lifecycle event 中。
 
 ### 4.2 CDP
@@ -161,7 +163,9 @@ Hostra 使用 Electron/Chromium 原生 `--remote-debugging-port`，不实现 CDP
 http://127.0.0.1:<actual-port>
 ```
 
-Hostra 在声明 ready 前必须验证 `/json/version` 可访问。
+固定 CDP 端口在启动前必须确认 `127.0.0.1:<port>` 当前可绑定；已被占用时直接 startup failure，不得把已有进程的 `/json/version` 误认为当前 Hostra 的 CDP endpoint。
+
+Hostra 在声明 ready 前必须验证自己的 `/json/version` 可访问。
 
 ### 4.3 Electron version
 
@@ -231,6 +235,7 @@ Hostra 启动顺序固定为：
 ```text
 Electron Main starts
 -> apply userData path
+-> preflight fixed CDP port when configured
 -> configure CDP switch when enabled
 -> app.whenReady()
 -> bind RPC on 127.0.0.1
@@ -269,6 +274,7 @@ hostra.ready
 
 ```text
 app.whenReady failure
+fixed CDP port already occupied
 RPC bind/listen failure
 CDP endpoint discovery/verification failure
 ```
@@ -645,6 +651,7 @@ Host Control Plane 在 shutdown convergence 完成前保持可用；RPC 是最�
 first shutdown request
 -> commit shutting-down state
 -> emit host.shuttingDown
+-> reject creation of new Hostra-owned resources
 -> request all BrowserWindow close
 -> request subprocess SIGTERM when present
 -> observe window.closed / subprocess.exited
@@ -652,6 +659,13 @@ first shutdown request
 -> close RPC
 -> app.quit()
 ```
+
+一旦 `host.state = shutting-down`：
+
+- `openWindow()` 必须拒绝，使用现有 `-32602` 类错误，message 固定为 `Host is shutting down`；
+- `closeWindow()` 对仍存在的 window 继续允许；
+- `getVersion/getPlatform/getArch/getAppPath/getAllWindows/getHostState` 等只读 RPC 继续允许，直到 RPC transport 关闭；
+- 不允许创建新的 Hostra-owned runtime resource。
 
 为了避免 renderer 或 child process 阻止 Hostra 永久退出，内部 grace period 固定为：
 
@@ -755,6 +769,8 @@ bind 127.0.0.1
 -> RPC accepts authenticated/unauthenticated connection according to existing token policy
 ```
 
+固定端口已占用时必须 startup failure。
+
 ### 16.3 CDP endpoint
 
 覆盖：
@@ -764,6 +780,8 @@ CDP unset
 CDP fixed port
 CDP port=0
 ```
+
+固定端口已被其它进程占用时必须 startup failure，且不得误认已有 `/json/version`。
 
 动态端口场景验证：
 
@@ -844,6 +862,8 @@ error shutdown
 
 ```text
 host.shuttingDown emitted once
+-> openWindow rejected after shutdown transition
+-> read-only RPC remains available during convergence
 -> window.closed / subprocess.exited remain observable while RPC is open
 -> graceful convergence
 -> 1000ms force fallback when needed
@@ -922,6 +942,7 @@ install Hostra
 -> connect CDP and inspect fixture Renderer
 -> trigger shutdown
 -> observe one host.shuttingDown
+-> reject new resource creation
 -> observe remaining window/subprocess convergence while RPC is alive
 -> RPC closes after control-plane convergence
 -> parent observes final Hostra process exit
