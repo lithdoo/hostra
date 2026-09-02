@@ -68,9 +68,15 @@ function loadConfig() {
 
 const config = loadConfig();
 
-console.log('[hostra] Config:', config);
+console.log('[hostra] Config:', {
+  ...config,
+  rpcToken: config.rpcToken ? '[redacted]' : null
+});
 
 const env = { ...process.env };
+// IDE terminals may set this for their own Electron helpers. Hostra always
+// launches a real Electron main process.
+delete env.ELECTRON_RUN_AS_NODE;
 
 if (config.appName) {
   env.HOSTRA_APP_NAME = config.appName;
@@ -103,6 +109,35 @@ const child = spawn(electronPath, [mainPath], {
   env
 });
 
-child.on('close', (code) => {
-  process.exit(code);
+function forwardSignal(signal) {
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill(signal);
+  }
+}
+
+process.on('SIGINT', forwardSignal);
+process.on('SIGTERM', forwardSignal);
+
+child.on('error', (error) => {
+  console.error('[hostra] Failed to start Electron:', error.message);
+  process.exitCode = 1;
+});
+
+child.on('exit', (code, signal) => {
+  if (code !== null) {
+    process.exit(code);
+    return;
+  }
+
+  if (signal) {
+    try {
+      process.removeListener('SIGINT', forwardSignal);
+      process.removeListener('SIGTERM', forwardSignal);
+      process.kill(process.pid, signal);
+      return;
+    } catch (error) {
+      console.error(`[hostra] Electron exited via ${signal}`);
+    }
+  }
+  process.exit(1);
 });

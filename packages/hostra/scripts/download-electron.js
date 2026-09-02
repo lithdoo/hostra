@@ -1,4 +1,3 @@
-const { download, getHostArch } = require('@electron/get');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -6,33 +5,42 @@ const AdmZip = require('adm-zip');
 
 const electronBinDir = path.join(__dirname, '..', 'electron_bin');
 
-function getLatestVersion() {
-  return new Promise((resolve, reject) => {
-    https.get('https://registry.npmjs.org/electron/latest', (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json.version);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }).on('error', reject);
-  });
+function resolveElectronVersion(env = process.env) {
+  const packageJson = require('../package.json');
+  const version = env.HOSTRA_ELECTRON_VERSION || packageJson.hostra?.electronVersion;
+
+  if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error('Electron version must be an exact version');
+  }
+
+  return version;
 }
 
-function downloadFile(url, destPath) {
+function downloadFile(url, destPath, redirects = 0) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
     https.get(url, (response) => {
       if (response.statusCode === 301 || response.statusCode === 302) {
-        downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+        response.resume();
+        if (!response.headers.location || redirects >= 5) {
+          reject(new Error(`Too many redirects while downloading ${url}`));
+          return;
+        }
+        const nextUrl = new URL(response.headers.location, url).href;
+        downloadFile(nextUrl, destPath, redirects + 1).then(resolve).catch(reject);
         return;
       }
+
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`Electron download returned HTTP ${response.statusCode}`));
+        return;
+      }
+
+      const file = fs.createWriteStream(destPath);
+      response.once('error', reject);
+      file.once('error', reject);
       response.pipe(file);
-      file.on('finish', () => {
+      file.once('finish', () => {
         file.close();
         resolve(destPath);
       });
@@ -58,8 +66,8 @@ async function downloadElectron() {
   const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'electron-'));
 
   try {
-    const version = await getLatestVersion();
-    console.log(`Latest Electron version: ${version}`);
+    const version = resolveElectronVersion();
+    console.log(`Electron version: ${version}`);
 
     const mirrorBase = process.env.HOSTRA_MIRROR || 'https://npmmirror.com/mirrors/electron/';
     console.log(`Using mirror: ${mirrorBase}`);
@@ -92,4 +100,8 @@ async function downloadElectron() {
   }
 }
 
-downloadElectron();
+if (require.main === module) {
+  downloadElectron();
+}
+
+module.exports = { downloadElectron, resolveElectronVersion };

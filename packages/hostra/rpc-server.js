@@ -1,194 +1,152 @@
 const ws = require('ws');
-const path = require('path');
-const { BrowserWindow } = require('electron');
 
-const windows = new Map();
-const configDir = process.env.HOSTRA_CONFIG_DIR || process.cwd();
+const LOOPBACK_HOST = '127.0.0.1';
 
-function createRandomWindowId() {
-  return `window_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+function normalizeArguments(portOrOptions, legacyOptions) {
+  if (typeof portOrOptions === 'object' && portOrOptions !== null) {
+    return portOrOptions;
+  }
+
+  return {
+    ...legacyOptions,
+    port: portOrOptions
+  };
 }
 
-const methods = {
-  getVersion: function(args) {
-    return process.versions.electron;
-  },
-  getPlatform: function(args) {
-    return process.platform;
-  },
-  getArch: function(args) {
-    return process.arch;
-  },
-  getAppPath: function(args) {
-    const { app } = require('electron');
-    return app.getPath(args.name);
-  },
-  openWindow: function(args) {
-    const { id, title, width, height, loadUrl, devTool } = args;
-    let windowId = typeof id === 'string' && id.trim() ? id.trim() : '';
-
-    if (windowId && windows.has(windowId)) {
-      throw { code: -32602, message: `Window id already exists: ${windowId}` };
-    }
-
-    if (!windowId) {
-      do {
-        windowId = createRandomWindowId();
-      } while (windows.has(windowId));
-    }
-    
-    let url = loadUrl;
-    if (loadUrl && !loadUrl.startsWith('http://') && !loadUrl.startsWith('https://') && !loadUrl.startsWith('file://')) {
-      const resolvedPath = path.resolve(configDir, loadUrl);
-      url = `file://${resolvedPath}`;
-    }
-
-    const win = new BrowserWindow({
-      width: width || 800,
-      height: height || 600,
-      title: title || 'Electron',
-      frame: true,
-      autoHideMenuBar: true,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        devTools: devTool || false
-      }
-    });
-
-    if (url) {
-      win.loadURL(url);
-    }
-
-    win.on('closed', () => {
-      windows.delete(windowId);
-    });
-
-    windows.set(windowId, { win, option: args, windowId });
-    
-    return windowId;
-  },
-  closeWindow: function(args) {
-    const { windowId } = args;
-    const windowInfo = windows.get(windowId);
-    
-    if (windowInfo) {
-      windowInfo.win.close();
-      windows.delete(windowId);
-      return true;
-    } else {
-      throw { code: -32602, message: `Window not found: ${windowId}` };
-    }
-  },
-  getAllWindows: function(args) {
-    const result = [];
-    for (const [windowId, info] of windows) {
-      result.push({
-        windowId,
-        title: info.option.title || 'Untitled',
-        width: info.option.width || 800,
-        height: info.option.height || 600,
-        loadUrl: info.option.loadUrl || '',
-        devTool: info.option.devTool || false
-      });
-    }
-    return result;
-  }
-};
-
-function createRpcServer(port = 9222, options = {}) {
+function createRpcServer(portOrOptions = 9333, legacyOptions = {}) {
+  const options = normalizeArguments(portOrOptions, legacyOptions);
+  const host = options.host || LOOPBACK_HOST;
+  const port = options.port ?? 9333;
   const requiredToken = options.token || '';
-  const wss = new ws.WebSocketServer({ port });
+  const methods = options.methods || {};
 
-  wss.on('connection', (clientWs, req) => {
-    if (requiredToken) {
-      let providedToken = '';
+  return new Promise((resolve, reject) => {
+    const wss = new ws.WebSocketServer({ host, port });
+    let settled = false;
+
+    const safeSend = (client, message) => {
+      if (client.readyState !== ws.OPEN) return;
       try {
-        const requestUrl = new URL(req.url || '/', `ws://localhost:${port}`);
-        providedToken = requestUrl.searchParams.get('token') || '';
-      } catch (err) {
-        providedToken = '';
+        client.send(message);
+      } catch (error) {
+        console.warn('[JsonRpcServer] Failed to send WebSocket message:', error.message);
       }
+    };
 
-      if (providedToken !== requiredToken) {
-        console.warn('[JsonRpcServer] Unauthorized RPC connection rejected');
-        clientWs.close(1008, 'Unauthorized');
-        return;
-      }
-    }
+    const rejectStartup = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
 
-    clientWs.on('message', (data) => {
-      try {
-        const request = JSON.parse(data.toString());
-        
-        if (request.method) {
-          const method = methods[request.method];
-          
-          if (method) {
-            try {
-              const result = method(request.params || {});
-              clientWs.send(JSON.stringify({
-                jsonrpc: '2.0',
-                id: request.id,
-                result: result
-              }));
-            } catch (err) {
-              clientWs.send(JSON.stringify({
-                jsonrpc: '2.0',
-                id: request.id,
-                error: {
-                  code: err.code || -32603,
-                  message: err.message || String(err)
-                }
-              }));
+    wss.once('error', rejectStartup);
+
+    wss.once('listening', () => {
+      if (settled) return;
+      settled = true;
+      wss.off('error', rejectStartup);
+
+      const address = wss.address();
+      const actualPort = typeof address === 'object' && address ? address.port : port;
+      let closed = false;
+
+      const notify = (method, params) => {
+        const message = JSON.stringify({ jsonrpc: '2.0', method, params });
+        for (const client of wss.clients) {
+          safeSend(client, message);
+        }
+      };
+
+      const rpcServer = {
+        host,
+        port: actualPort,
+        endpoint: `ws://${host}:${actualPort}`,
+        wss,
+        notify,
+        call(method, params) {
+          notify(method, params);
+        },
+        close() {
+          if (closed) return Promise.resolve();
+          closed = true;
+
+          return new Promise((closeResolve) => {
+            wss.close(() => closeResolve());
+            for (const client of wss.clients) {
+              client.terminate();
             }
-          } else {
-            clientWs.send(JSON.stringify({
+          });
+        }
+      };
+
+      console.log(`[JsonRpcServer] Started on ${rpcServer.endpoint}`);
+      resolve(rpcServer);
+    });
+
+    wss.on('connection', (clientWs, req) => {
+      if (requiredToken) {
+        let providedToken = '';
+        try {
+          const requestUrl = new URL(req.url || '/', `ws://${host}:${port}`);
+          providedToken = requestUrl.searchParams.get('token') || '';
+        } catch (error) {
+          providedToken = '';
+        }
+
+        if (providedToken !== requiredToken) {
+          console.warn('[JsonRpcServer] Unauthorized RPC connection rejected');
+          clientWs.close(1008, 'Unauthorized');
+          return;
+        }
+      }
+
+      clientWs.on('message', async (data) => {
+        let request;
+        try {
+          request = JSON.parse(data.toString());
+        } catch (error) {
+          safeSend(clientWs, JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32700, message: `Parse error: ${error.message}` },
+            id: null
+          }));
+          return;
+        }
+
+        if (!request.method) return;
+
+        const method = methods[request.method];
+        if (!method) {
+          if (request.id !== undefined) {
+            safeSend(clientWs, JSON.stringify({
+              jsonrpc: '2.0',
+              id: request.id,
+              error: { code: -32601, message: `Method not found: ${request.method}` }
+            }));
+          }
+          return;
+        }
+
+        try {
+          const result = await method(request.params || {});
+          if (request.id !== undefined) {
+            safeSend(clientWs, JSON.stringify({ jsonrpc: '2.0', id: request.id, result }));
+          }
+        } catch (error) {
+          if (request.id !== undefined) {
+            safeSend(clientWs, JSON.stringify({
               jsonrpc: '2.0',
               id: request.id,
               error: {
-                code: -32601,
-                message: `Method not found: ${request.method}`
+                code: error.code || -32603,
+                message: error.message || String(error)
               }
             }));
           }
         }
-      } catch (e) {
-        // console.error('[RPC] Parse error:', e);
-        clientWs.send(JSON.stringify({
-          jsonrpc: '2.0',
-          error: { code: -32700, message: 'Parse error: ' + e.message },
-          id: null
-        }));
-      }
+      });
     });
   });
-
-  const rpcServer = {
-    port,
-    wss,
-    call: function(method, params) {
-      for (const client of wss.clients) {
-        const request = { jsonrpc: '2.0', method, params, id: Date.now() };
-        client.send(JSON.stringify(request));
-      }
-    },
-    close: function() {
-      for (const client of wss.clients) {
-        client.close();
-      }
-      for (const [windowId, info] of windows) {
-        info.win.close();
-      }
-      windows.clear();
-      wss.close();
-    }
-  };
-
-  console.log(`[JsonRpcServer] Started on ws://localhost:${port}`);
-  console.log(`[JsonRpcServer] Config dir: ${configDir}`);
-  return rpcServer;
 }
 
-module.exports = { createRpcServer };
+module.exports = { createRpcServer, LOOPBACK_HOST };
