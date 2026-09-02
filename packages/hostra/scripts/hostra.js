@@ -110,12 +110,15 @@ const child = spawn(electronPath, [mainPath], {
 
 function forwardSignal(signal) {
   if (child.exitCode === null && child.signalCode === null) {
+    console.log(`[hostra] Forwarding ${signal} to Electron`);
     child.kill(signal);
   }
 }
 
-process.on('SIGINT', forwardSignal);
-process.on('SIGTERM', forwardSignal);
+const handleSigint = () => forwardSignal('SIGINT');
+const handleSigterm = () => forwardSignal('SIGTERM');
+process.on('SIGINT', handleSigint);
+process.on('SIGTERM', handleSigterm);
 
 child.on('error', (error) => {
   console.error('[hostra] Failed to start Electron:', error.message);
@@ -130,8 +133,8 @@ child.on('exit', (code, signal) => {
 
   if (signal) {
     try {
-      process.removeListener('SIGINT', forwardSignal);
-      process.removeListener('SIGTERM', forwardSignal);
+      process.removeListener('SIGINT', handleSigint);
+      process.removeListener('SIGTERM', handleSigterm);
       process.kill(process.pid, signal);
       return;
     } catch (error) {

@@ -554,7 +554,10 @@ test('CLI SIGTERM produces signal shutdown and converges before exit', {
   const shuttingDown = await rpc.waitForNotification(
     (message) => message.params?.type === 'host.shuttingDown',
     'signal shutdown'
-  );
+  ).catch((error) => {
+    error.message += `\n${JSON.stringify(hostra.output(), null, 2)}`;
+    throw error;
+  });
   assert.deepEqual(shuttingDown.params.data, { reason: 'signal', signal: 'SIGTERM' });
   const duringShutdown = await rpc.call('getHostState');
   assert.equal(duringShutdown.host.state, 'shutting-down');
