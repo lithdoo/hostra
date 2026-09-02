@@ -27,6 +27,12 @@ jobs:
         env:
           HOSTRA_MIRROR: https://github.com/electron/electron/releases/download/
 
+      - name: Configure Electron sandbox on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root packages/hostra/electron_bin/chrome-sandbox
+          sudo chmod 4755 packages/hostra/electron_bin/chrome-sandbox
+
       - name: Run qualification on Windows
         if: runner.os == 'Windows'
         run: npm test
